@@ -33,13 +33,15 @@ telling linux to use only the first 32 megabytes
 
 4k bytes of free shared ram at 0x80000000 on the OMAP
 
+Development board: I've used both the Zoom OMAP-L138 EVM and the Hawkboard
+
 * Configuration
 
 There's no auto configuration yet. In the mean time, edit the following
 variables by hand.  They appear in Makefile, example/Makefile and the
 script armdsp-link
 
-** KERNELDIR /opt/hawkboard/linux-omapl1
+** KERNELDIR /opt/hawkboard/linux-omapl1 or /opt/ti/linux-03.20.00.11/
 
 ** ARMDSP_DIR /usr/local/armdsp
 
