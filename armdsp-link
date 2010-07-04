@@ -1,0 +1,42 @@
+#! /bin/sh
+
+if [ $# -lt 3 -o "x$1" != "x-o" ]
+then
+    echo "usage: armdsp-link -o output file.obj ..."
+    exit 1
+fi
+
+shift
+outname=$1
+shift
+
+elfname=`basename $outname .dsp`.elf
+
+adir=/usr/local/armdsp
+
+cl6x --abi=eabi \
+    --symdebug:none \
+    --printf_support=minimal \
+    --mem_model:const=far \
+    --mem_model:data=far \
+    -z ${adir}/dsp/armdsp-link.cmd \
+    --output_file ${elfname} \
+    ${adir}/dsp/vecs.obj \
+    ${adir}/dsp/dsptrg.obj \
+    $*
+ret=$?
+if [ $ret != 0 ]
+then
+    exit $ret
+fi
+
+hex6x -q -m --order=M --romwidth=32 -o=${outname} ${elfname}
+ret=$?
+if [ $ret != 0 ]
+then
+    echo $ret
+fi
+
+exit 0
+
+

@@ -1,0 +1,106 @@
+armdsp - a simple framework for developing dsp programs for the TI OMAP
+
+Pace Willisson
+pace@alum.mit.edu
+July 3, 2010
+
+* Overview
+
+armdsp adds the ability to run bare metal dsp programs on an arm linux
+system running on the TI OMAP processor.  The main components are:
+
+armdsp.ko - an arm kernel module for setting up the dsp
+
+rundsp - an arm program for loading a dsp binary into memory, and then
+starting the dsp
+
+armhost - an arm program that communicates with the dsp through shared
+memory and provides debug printouts
+
+The directory example/ shows how your dsp application will be structured.
+
+* Prerequisites
+
+TI DSP compiler (cl6x, etc)
+
+ARM compiler (arm-none-linux-gnueabi-gcc, etc)
+
+ARM kernel, configured and compiled
+
+32 megabytes of free DDR memory on the OMAP in the range
+0xc4000000...0xc8000000.  You can do this on a 64 megabyte board by
+telling linux to use only the first 32 megabytes
+
+4k bytes of free shared ram at 0x80000000 on the OMAP
+
+* Configuration
+
+There's no auto configuration yet. In the mean time, edit the following
+variables by hand.  They appear in Makefile, example/Makefile and the
+script armdsp-link
+
+** KERNELDIR /opt/hawkboard/linux-omapl1
+
+** ARMDSP_DIR /usr/local/armdsp
+
+** ARMDSP_NFSROOT default /arm
+
+ARMDSP_NFSROOT is optional, and is used in "make test" to put files
+where the arm can get at them.
+
+* Compilation
+
+	host$ make
+	host# make install
+
+* Testing
+
+Send the files to the arm with:
+
+	host$ make test
+
+Log into the arm with two windows.  In the first run:
+
+	arm# armdsp-ldmod
+	arm# armhost
+	
+armhost is now waiting for messages from the dsp, and will print them
+out on the armhost standard output.
+
+In the other window, run:
+
+	arm# rundsp dsptest.dsp
+	(the dsp will be started, and a message will be printed in the
+	armhost window)
+
+Your normal development cycle will be to leave armhost running while
+you update your application and execute "rundsp" to start each new
+version.
+
+* Theory of operation
+
+armdsp uses two areas of memory:
+
+1. the fist page of the shared memory (address 0x80000000)
+
+2. 32 megabytes of DDR ram (address 0xc4000000)
+
+The first 512 bytes of the shared memory page is used for the dsp
+interrupt vector table.  The dsp will start executing from the start
+of this table when it comes out of reset.
+
+The dsp program is loaded in the lower part of the DDR ram, and the
+dsp stack is set to the top.
+
+The middle of the shared memory page is used to support the TI C
+runtime library functions with names such as HOSTwrite, etc, and which
+implement simple file-like io.  These functions are normally used with
+a jtag emulator to transfer messages between the dsp and to the host
+development system.  The TI library is nicely designed, so that simply
+defining the functions writemsg and readmsg in the dsp application
+allows the same mechanism to be used to communicate through shared
+memory with the "armhost" program
+
+The protocol is adequate for debug messages, but you'll need to
+implement something custom with other areas of shared memory for a
+real application.

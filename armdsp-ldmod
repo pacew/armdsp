@@ -1,0 +1,22 @@
+#! /bin/sh
+
+lsmod | grep armdsp > /dev/null 2>&1
+if [ $? = 0 ]
+then
+    echo removing...
+    rmmod armdsp
+fi
+rm -f /dev/armdsp
+
+insmod armdsp.ko
+ret=$?
+if [ $ret != 0 ]
+then
+	echo "error loading"
+	exit 1
+fi
+
+major=`grep armdsp /proc/devices | awk '{print $1}'`
+mknod /dev/armdsp c $major 0
+ls -l /dev/armdsp
+

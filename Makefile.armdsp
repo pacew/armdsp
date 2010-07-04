@@ -1,0 +1,19 @@
+# -*- mode:Makefile -*-
+ARMDSP_DIR=/usr/local/armdsp
+ARMCC = arm-none-linux-gnueabi-gcc -g -Wall
+CL6X = cl6x
+CL6X_FLAGS = --abi=eabi \
+	--symdebug:none \
+	--printf_support=minimal \
+	--mem_model:const=far \
+	--mem_model:data=far
+
+.SUFFIXES: .obj .asm
+
+.c.obj:
+	$(CL6X) $(CL6X_FLAGS) -c $*.c
+
+.asm.obj:
+	$(CL6X) $(CL6X_FLAGS) -c $*.asm
+
+ARMDSP_LINK = $(ARMDSP_DIR)/bin/armdsp-link
