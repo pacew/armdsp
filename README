@@ -21,6 +21,10 @@ The directory example/ shows how your dsp application will be structured.
 
 * Prerequisites
 
+Board: tested with Zoom OMAP-L138 EVM and the Hawkboard
+
+Host system: Ubuntu 9.10 or similar
+
 TI DSP compiler (cl6x, etc)
 
 ARM compiler (arm-none-linux-gnueabi-gcc, etc)
@@ -32,8 +36,6 @@ ARM kernel, configured and compiled
 telling linux to use only the first 32 megabytes
 
 4k bytes of free shared ram at 0x80000000 on the OMAP
-
-Development board: I've used both the Zoom OMAP-L138 EVM and the Hawkboard
 
 * Configuration
 
