@@ -1,12 +1,12 @@
 # -*- mode:Makefile -*-
 ARMDSP_DIR=/usr/local/armdsp
-ARMCC = arm-none-linux-gnueabi-gcc -g -Wall
+ARMCC = arm-none-linux-gnueabi-gcc -g -Wall -I$(ARMDSP_DIR)/include
 CL6X = cl6x
+
+# it's safe to use --mem_model here if you want other than the default
 CL6X_FLAGS = --abi=eabi \
 	--symdebug:none \
-	--printf_support=minimal \
-	--mem_model:const=far \
-	--mem_model:data=far
+	-I$(ARMDSP_DIR)/include
 
 .SUFFIXES: .obj .asm
 

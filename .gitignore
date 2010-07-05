@@ -16,3 +16,4 @@ armdsp.mod.c
 .armdsp.mod.o.cmd
 .armdsp.ko.cmd
 armhost
+regdefs

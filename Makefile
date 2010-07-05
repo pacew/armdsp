@@ -21,10 +21,7 @@ ARMCC = $(CROSS_COMPILE)gcc -g -Wall
 # for compiling dsp programs =====================================
 CL6X = cl6x
 CL6X_FLAGS = --abi=eabi \
-	--symdebug:none \
-	--printf_support=minimal \
-	--mem_model:const=far \
-	--mem_model:data=far
+	--symdebug:none 
 
 .SUFFIXES: .obj .asm
 
@@ -35,7 +32,7 @@ CL6X_FLAGS = --abi=eabi \
 	$(CL6X) $(CL6X_FLAGS) -c $*.asm
 # ================================================================
 
-all: armdsp.ko dsptest.dsp rundsp armhost
+all: armdsp.ko dsptest.dsp rundsp armhost regdefs regs-omap-l138.h
 
 armdsp.ko: armdsp.c armdsp.h
 	$(MAKE) -C $(KERNELDIR) M=$(PWD) modules
@@ -45,6 +42,8 @@ dsptest.dsp: $(DSPTEST_OBJS) armdsp-link.cmd
 	$(CL6X) $(CL6X_FLAGS) -z armdsp-link.cmd $(DSPTEST_OBJS) \
 		--output_file dsptest.elf
 	hex6x -q -m --order=M --romwidth=32 -o=dsptest.dsp dsptest.elf
+	dis6x dsptest.elf > dsptest.dis
+	nm6x dsptest.elf | sort > dsptest.nm
 
 rundsp: rundsp.c armdsp.h
 	$(ARMCC) -o rundsp rundsp.c
@@ -52,10 +51,17 @@ rundsp: rundsp.c armdsp.h
 armhost: armhost.c armdsp.h
 	$(ARMCC) -o armhost armhost.c
 
+regdefs: regdefs.c
+	gcc -g -Wall -o regdefs regdefs.c
+
+regs-omap-l138.h: regdefs regs.conf
+	./regdefs
+
 install: all
 	mkdir -p -m 755 $(ARMDSP_DIR)/bin
 	mkdir -p -m 755 $(ARMDSP_DIR)/arm
 	mkdir -p -m 755 $(ARMDSP_DIR)/dsp
+	mkdir -p -m 755 $(ARMDSP_DIR)/include
 	install -c -m 755 armdsp-link $(ARMDSP_DIR)/bin/.
 	install -c -m 644 Makefile.armdsp $(ARMDSP_DIR)/.
 	install -c -m 644 armdsp.ko $(ARMDSP_DIR)/arm/.
@@ -66,6 +72,7 @@ install: all
 	install -c -m 644 vecs.obj $(ARMDSP_DIR)/dsp/.
 	install -c -m 644 dsptrg.obj $(ARMDSP_DIR)/dsp/.
 	install -c -m 644 armdsp-link.cmd $(ARMDSP_DIR)/dsp/.
+	install -c -m 644 regs-omap-l138.h $(ARMDSP_DIR)/include/.
 
 test: all
 	install -c -m 644 armdsp.ko $(ARMDSP_NFSROOT)/.
@@ -75,9 +82,10 @@ test: all
 	install -c -m 644 dsptest.dsp $(ARMDSP_NFSROOT)/.
 
 clean:
-	rm -f *.o *.ko *.obj *.elf *.mod.c *~ .*~ ?
+	rm -f *.o *.ko *.obj *.elf *.mod.c *~ .*~ ? *.dis *.nm
 	rm -f rundsp armhost dsptest.dsp dsptest.elf
 	rm -f Module.symvers modules.order
+	rm -f regs-omap-l138.h
 	rm -rf .tmp_versions .*.cmd
 	$(MAKE) -C example clean
 

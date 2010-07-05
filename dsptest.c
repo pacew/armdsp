@@ -7,6 +7,7 @@ main (int argc, char **argv)
 	return (0);
 }
 
+
 void __interrupt int_handler1 (void) { }
 void __interrupt int_handler2 (void) { }
 void __interrupt int_handler3 (void) { }

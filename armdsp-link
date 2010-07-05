@@ -16,7 +16,6 @@ adir=/usr/local/armdsp
 
 cl6x --abi=eabi \
     --symdebug:none \
-    --printf_support=minimal \
     --mem_model:const=far \
     --mem_model:data=far \
     -z ${adir}/dsp/armdsp-link.cmd \
