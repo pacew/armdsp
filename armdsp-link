@@ -15,9 +15,6 @@ elfname=`basename $outname .dsp`.elf
 adir=/usr/local/armdsp
 
 cl6x --abi=eabi \
-    --symdebug:none \
-    --mem_model:const=far \
-    --mem_model:data=far \
     -z ${adir}/dsp/armdsp-link.cmd \
     --output_file ${elfname} \
     ${adir}/dsp/vecs.obj \
@@ -27,6 +24,13 @@ ret=$?
 if [ $ret != 0 ]
 then
     exit $ret
+fi
+
+x=`nm6x ${elfname} | grep '^80000000 . vector_table$'`
+if [ -z "$x" ]
+then
+    echo "armdsp-link: vector_table not allocated properly"
+    exit 1
 fi
 
 hex6x -q -m --order=M --romwidth=32 -o=${outname} ${elfname}

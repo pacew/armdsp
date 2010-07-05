@@ -20,8 +20,7 @@ ARMCC = $(CROSS_COMPILE)gcc -g -Wall
 
 # for compiling dsp programs =====================================
 CL6X = cl6x
-CL6X_FLAGS = --abi=eabi \
-	--symdebug:none 
+CL6X_FLAGS = --abi=eabi
 
 .SUFFIXES: .obj .asm
 
@@ -52,7 +51,7 @@ armhost: armhost.c armdsp.h
 	$(ARMCC) -o armhost armhost.c
 
 regdefs: regdefs.c
-	gcc -g -Wall -o regdefs regdefs.c
+	cc -g -Wall -o regdefs regdefs.c
 
 regs-omap-l138.h: regdefs regs.conf
 	./regdefs
@@ -83,7 +82,8 @@ test: all
 
 clean:
 	rm -f *.o *.ko *.obj *.elf *.mod.c *~ .*~ ? *.dis *.nm
-	rm -f rundsp armhost dsptest.dsp dsptest.elf
+	rm -f dsptest.asm
+	rm -f rundsp armhost dsptest.dsp dsptest.elf regdefs
 	rm -f Module.symvers modules.order
 	rm -f regs-omap-l138.h
 	rm -rf .tmp_versions .*.cmd

@@ -9,6 +9,8 @@ rundsp
 *.elf
 *.asm
 *.dsp
+*.dis
+*.nm
 Module.symvers
 .tmp_versions
 armdsp.mod.c
@@ -17,3 +19,4 @@ armdsp.mod.c
 .armdsp.ko.cmd
 armhost
 regdefs
+regs-omap-l138.h
