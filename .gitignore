@@ -20,3 +20,5 @@ armdsp.mod.c
 armhost
 regdefs
 regs-omap-l138.h
+armnet
+armnet.arm

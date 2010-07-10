@@ -31,7 +31,8 @@ CL6X_FLAGS = --abi=eabi
 	$(CL6X) $(CL6X_FLAGS) -c $*.asm
 # ================================================================
 
-all: armdsp.ko dsptest.dsp rundsp armhost regdefs regs-omap-l138.h
+all: armdsp.ko dsptest.dsp rundsp armhost regdefs regs-omap-l138.h \
+	armnet armnet.arm
 
 armdsp.ko: armdsp.c armdsp.h
 	$(MAKE) -C $(KERNELDIR) M=$(PWD) modules
@@ -47,8 +48,14 @@ dsptest.dsp: $(DSPTEST_OBJS) armdsp-link.cmd
 rundsp: rundsp.c armdsp.h
 	$(ARMCC) -o rundsp rundsp.c
 
-armhost: armhost.c armdsp.h
-	$(ARMCC) -o armhost armhost.c
+armnet: armnet.c
+	gcc -g -Wall -o armnet armnet.c
+
+armnet.arm: armnet.c
+	$(ARMCC) -o armnet.arm armnet.c
+
+armhost: armdsp.h armhost.c
+	$(ARMCC) -o armhost armhost.c 
 
 regdefs: regdefs.c
 	cc -g -Wall -o regdefs regdefs.c

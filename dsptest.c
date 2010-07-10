@@ -1,9 +1,19 @@
 #include <stdio.h>
 
+double x = 3.14;
+
 int
 main (int argc, char **argv)
 {
-	printf ("dsptest %s\n", __TIME__);
+	int i;
+	unsigned char *p;
+
+	printf ("dsptest %s %g\n", __TIME__, x);
+
+	p = (unsigned char *)&x;
+	for (i = 0; i < 8; i++)
+		printf ("%02x ", p[i]);
+	printf ("\n");
 	return (0);
 }
 
