@@ -25,15 +25,23 @@
 #include <linux/io.h>
 #include <linux/fs.h>
 #include <linux/cdev.h>
+#include <linux/sched.h>
+#include <linux/interrupt.h>
 
 #include <asm/uaccess.h>
 #include <asm/cacheflush.h>
+
+#include <mach/common.h>
 
 #include "trgbuf.h"
 #include "armdsp.h"
 
 #define SYSCFG0_ADDR 0x01c14000
 #define HOST1CFG_OFFSET 0x44
+#define CHIPSIG 0x174
+#define CHIPSIG_CLR 0x178
+
+#define SICR 0x24
 
 #define PSC0_ADDR 0x01c10000
 
@@ -58,28 +66,11 @@
 
 static void *armdsp_comm;
 static struct trgbuf *trgbuf;
+static int have_irq_chipint0;
 
-static uint32_t
-armdsp_readphys (uint32_t addr)
-{
-	uint32_t *p, val = 0;
 
-	if ((p = ioremap (addr, sizeof *p)) != NULL) {
-		val = readl (p);
-		iounmap (p);
-	}
-	return (val);
-}
-
-static void
-armdsp_writephys (uint32_t val, uint32_t addr)
-{
-	uint32_t *p;
-	if ((p = ioremap (addr, sizeof *p)) != NULL) {
-		writel (val, p);
-		iounmap (p);
-	}
-}
+#define armdsp_readphys(addr) (readl(IO_ADDRESS(addr)))
+#define armdsp_writephys(val,addr) (writel(val,IO_ADDRESS(addr)))
 
 void
 armdsp_reset (void)
@@ -119,6 +110,8 @@ armdsp_run (void)
 	armdsp_writephys (val | MDCTL_LRESET, PSC0_ADDR + MDCTL15);
 }
 
+static DECLARE_WAIT_QUEUE_HEAD (armdsp_wait);
+
 ssize_t
 armdsp_read (struct file *filp, char __user *buf, size_t count,
 	     loff_t *f_pos)
@@ -126,30 +119,27 @@ armdsp_read (struct file *filp, char __user *buf, size_t count,
 	unsigned int i;
 	unsigned char locbuf[sizeof (struct trgbuf) + TRGBUF_BUFSIZ];
 	unsigned int data_len, total_len;
-	uint32_t owner, control;
+	int ret;
 	
-	/*
-	 * need to make sure we'll see fresh data from the dsp
-	 * 
-	 * I don't know the right way to do the cache and barrier stuff,
-	 * so try everything.
-	 */
-	rmb ();
-	clean_dcache_area (trgbuf, sizeof trgbuf->control);
+	ret = wait_event_interruptible_timeout (armdsp_wait,
+						(readl (&trgbuf->control)
+						 & TRGBUF_OWNER_MASK),
+						1*HZ);
+	printk ("armdsp_read: %d\n", ret);
 
-	control = readl (&trgbuf->control);
+	/* returns 0 if timed out */
+	if (ret <= 0)
+		return (ret);
 
-	owner = (control & TRGBUF_OWNER_MASK) >> TRGBUF_OWNER_SHIFT;
-	if (owner == 0)
-		return (-EAGAIN);
+	data_len = (readl (&trgbuf->control)
+		    & TRGBUF_LENGTH_MASK)
+		>> TRGBUF_LENGTH_SHIFT;
 
-	data_len = (control & TRGBUF_LENGTH_MASK) >> TRGBUF_LENGTH_SHIFT;
 	total_len = sizeof (struct trgbuf) + data_len;
 	if (total_len > sizeof locbuf || total_len > count)
 		return (-EINVAL);
 
-	clean_dcache_area (trgbuf, total_len);
-
+	/* memcpy_fromio (locbuf, trgbuf, total_len); */
 	for (i = 0; i < total_len; i++)
 		locbuf[i] = readb ((void *)trgbuf + i);
 
@@ -198,19 +188,23 @@ armdsp_ioctl(struct inode *inode, struct file *filp,
 
 	int err = 0;
 	    
-	if (_IOC_TYPE(cmd) != DSPLOADER_IOC_MAGIC)
+	if (_IOC_TYPE(cmd) != ARMDSP_IOC_MAGIC)
 		return -ENOTTY;
 
 	switch(cmd) {
-	case DSPLOADER_IOCSTOP:
+	case ARMDSP_IOCSTOP:
 		armdsp_reset ();
 		break;
 
-	case DSPLOADER_IOCSTART:
+	case ARMDSP_IOCSTART:
 		flush_cache_all ();
 		wmb ();
 
 		armdsp_run();
+		break;
+
+	case ARMDSP_IOCSIMINT:
+		armdsp_writephys (1, SYSCFG0_ADDR + CHIPSIG); /* CHIPINT0 */
 		break;
 
 	  default:
@@ -231,15 +225,26 @@ struct file_operations armdsp_fops = {
 
 static void armdsp_cleanup (void);
 
+static irqreturn_t armdsp_irq (int irq, void *dev_id)
+{
+	printk ("armdsp_irq\n");
+
+	armdsp_writephys (1, SYSCFG0_ADDR + CHIPSIG_CLR); /* CHIPINT0 */
+
+	writel (SICR, davinci_soc_info.intc_base + IRQ_DA8XX_CHIPINT0);
+	wake_up (&armdsp_wait);
+	return (IRQ_HANDLED);
+}
+
 static int __init 
-armdsp_init(void)
+armdsp_init (void)
 {
 	int ret = 0;
 
 	ret = alloc_chrdev_region (&armdsp_dev, 0, 1, "armdsp");
 	if (ret)
-		return (ret);
-
+		goto cleanup;
+	
 	armdsp_comm = ioremap (ARMDSP_COMM_PHYS, ARMDSP_COMM_SIZE);
 	if (armdsp_comm == NULL) {
 		ret = -ENOMEM;
@@ -252,11 +257,19 @@ armdsp_init(void)
 	armdsp_cdev.owner = THIS_MODULE;
 	armdsp_cdev.ops = &armdsp_fops;
 	ret = cdev_add (&armdsp_cdev, armdsp_dev, 1);
+	if (ret)
+		goto cleanup;
+
+	ret = request_irq (IRQ_DA8XX_CHIPINT0, armdsp_irq,
+			   IRQF_DISABLED, "armdsp", &armdsp_cdev);
+	if (ret)
+		goto cleanup;
+	have_irq_chipint0 = 1;
+
+	return (0);
 
 cleanup:
-	if (ret)
-		armdsp_cleanup ();
-
+	armdsp_cleanup ();
 	return (ret);
 }
 
@@ -269,6 +282,11 @@ armdsp_exit(void)
 static void
 armdsp_cleanup (void)
 {
+	if (have_irq_chipint0) {
+		have_irq_chipint0 = 0;
+		free_irq (IRQ_DA8XX_CHIPINT0, &armdsp_cdev);
+	}
+
 	if (armdsp_comm) {
 		trgbuf = NULL;
 		iounmap (armdsp_comm);
