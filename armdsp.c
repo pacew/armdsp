@@ -119,7 +119,7 @@ ssize_t
 armdsp_read (struct file *filp, char __user *buf, size_t count,
 	     loff_t *f_pos)
 {
-	unsigned int i;
+	/* just 72 bytes */
 	unsigned char locbuf[sizeof (struct trgbuf) + TRGBUF_BUFSIZ];
 	unsigned int data_len, total_len;
 	int ret;
@@ -139,9 +139,7 @@ armdsp_read (struct file *filp, char __user *buf, size_t count,
 	if (total_len > sizeof locbuf || total_len > count)
 		return (-EINVAL);
 
-	/* memcpy_fromio (locbuf, trgbuf, total_len); */
-	for (i = 0; i < total_len; i++)
-		locbuf[i] = readb ((void *)trgbuf + i);
+	memcpy_fromio (locbuf, trgbuf, total_len);
 
 	if (copy_to_user (buf, locbuf, total_len))
 		return (-EFAULT);
@@ -153,11 +151,10 @@ ssize_t
 armdsp_write (struct file *filp, const char __user *buf, size_t count,
 	      loff_t *f_pos)
 {
-	unsigned int i;
 	union {
 		struct trgbuf trgbuf;
 		unsigned char buf[sizeof (struct trgbuf) + TRGBUF_BUFSIZ];
-	} loc;
+	} loc; /* just 72 bytes */
 	
 	if (count > sizeof loc)
 		return (-EINVAL);
@@ -165,15 +162,8 @@ armdsp_write (struct file *filp, const char __user *buf, size_t count,
 	if (copy_from_user (loc.buf, buf, count))
 		return (-EFAULT);
 
-	for (i = 0; i < count; i++)
-		writeb (loc.buf[i], (void *)trgbuf + i);
-
-	/*
-	 * need to make sure all our writes get all the way to memory
-	 * before we set the owner flag back to the dsp
-	 */
-	clean_dcache_area (trgbuf, count); /* drain WB */
-	wmb ();
+	loc.trgbuf.control |= TRGBUF_OWNER_MASK;
+	memcpy_toio (trgbuf, loc.buf, count);
 
 	loc.trgbuf.control &= ~TRGBUF_OWNER_MASK;
 	writel (loc.trgbuf.control, &trgbuf->control);
@@ -188,9 +178,6 @@ armdsp_ioctl(struct inode *inode, struct file *filp,
 
 	int err = 0;
 	    
-	if (_IOC_TYPE(cmd) != ARMDSP_IOC_MAGIC)
-		return -ENOTTY;
-
 	switch(cmd) {
 	case ARMDSP_IOCSTOP:
 		armdsp_reset ();
@@ -201,10 +188,6 @@ armdsp_ioctl(struct inode *inode, struct file *filp,
 		wmb ();
 
 		armdsp_run();
-		break;
-
-	case ARMDSP_IOCSIMINT:
-		armdsp_writephys (1, SYSCFG0_ADDR + CHIPSIG); /* CHIPINT0 */
 		break;
 
 	  default:
@@ -303,6 +286,10 @@ armdsp_exit(void)
 static void
 armdsp_cleanup (void)
 {
+	/* clear any pending interrupt */
+	armdsp_writephys (1, SYSCFG0_ADDR + CHIPSIG_CLR); /* CHIPINT0 */
+	writel (IRQ_DA8XX_CHIPINT0, davinci_soc_info.intc_base + SICR);
+
 	if (have_irq_chipint0) {
 		have_irq_chipint0 = 0;
 		free_irq (IRQ_DA8XX_CHIPINT0, &armdsp_cdev);
