@@ -1,3 +1,5 @@
+#ifndef _TRGBUF_H_
+#define _TRGBUF_H_
 /*
  * communication area is first page of shared ram
  */
@@ -28,3 +30,4 @@ struct trgbuf {
 #define TRGBUF_LENGTH_SHIFT 16
 #define TRGBUF_LENGTH_MASK 0xffff0000
 
+#endif /* _TRGBUF_H_ */

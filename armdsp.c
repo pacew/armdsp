@@ -73,7 +73,7 @@ static int have_irq_chipint0;
 #define armdsp_readphys(addr) (readl(IO_ADDRESS(addr)))
 #define armdsp_writephys(val,addr) (writel(val,IO_ADDRESS(addr)))
 
-void
+static void
 armdsp_reset (void)
 {
 	uint32_t val;
@@ -83,14 +83,10 @@ armdsp_reset (void)
 	armdsp_writephys (val & ~MDCTL_LRESET, PSC0_ADDR + MDCTL15);
 }
 
-void
+static void
 armdsp_run (void)
 {
 	uint32_t val;
-
-	/* write pointer to vector table */
-	armdsp_writephys (ARMDSP_COMM_PHYS + ARMDSP_COMM_VECS,
-			  SYSCFG0_ADDR + HOST1CFG_OFFSET);
 
 	val = armdsp_readphys (PSC0_ADDR + MDSTAT15);
 	if ((val & MDSTAT_STATE_MASK) != MDCTL_ENABLE) {
@@ -106,6 +102,10 @@ armdsp_run (void)
 			;
 	}
 
+	/* write pointer to vector table */
+	armdsp_writephys (ARMDSP_COMM_PHYS + ARMDSP_COMM_VECS,
+			  SYSCFG0_ADDR + HOST1CFG_OFFSET);
+
 	/* un-assert reset */
 	val = armdsp_readphys (PSC0_ADDR + MDCTL15);
 	armdsp_writephys (val | MDCTL_LRESET, PSC0_ADDR + MDCTL15);
@@ -115,7 +115,7 @@ static DECLARE_WAIT_QUEUE_HEAD (armdsp_wait);
 
 #define armdsp_trgbuf_avail() (readl(&trgbuf->control) & TRGBUF_OWNER_MASK)
 
-ssize_t
+static ssize_t
 armdsp_read (struct file *filp, char __user *buf, size_t count,
 	     loff_t *f_pos)
 {
@@ -131,8 +131,7 @@ armdsp_read (struct file *filp, char __user *buf, size_t count,
 	if (ret < 0)
 		return (ret);
 
-	data_len = (readl (&trgbuf->control)
-		    & TRGBUF_LENGTH_MASK)
+	data_len = (readl (&trgbuf->control) & TRGBUF_LENGTH_MASK)
 		>> TRGBUF_LENGTH_SHIFT;
 
 	total_len = sizeof (struct trgbuf) + data_len;
@@ -147,7 +146,7 @@ armdsp_read (struct file *filp, char __user *buf, size_t count,
 	return (total_len);
 }
 
-ssize_t
+static ssize_t
 armdsp_write (struct file *filp, const char __user *buf, size_t count,
 	      loff_t *f_pos)
 {
@@ -171,7 +170,7 @@ armdsp_write (struct file *filp, const char __user *buf, size_t count,
 	return (count);
 }
 
-int
+static int
 armdsp_ioctl(struct inode *inode, struct file *filp,
 	     unsigned int cmd, unsigned long arg)
 {
@@ -204,18 +203,16 @@ armdsp_poll (struct file *file, poll_table *wait)
 	poll_wait (file, &armdsp_wait, wait);
 	
 	mask = 0;
-
 	if (armdsp_trgbuf_avail ())
 		mask |= POLLIN | POLLRDNORM;
-
 	mask |= POLLOUT | POLLWRNORM;
 	return (mask);
 }
 
-dev_t armdsp_dev;
-struct cdev armdsp_cdev;
+static dev_t armdsp_dev;
+static struct cdev armdsp_cdev;
 
-struct file_operations armdsp_fops = {
+static struct file_operations armdsp_fops = {
 	.owner = THIS_MODULE,
 	.read = armdsp_read,
 	.write = armdsp_write,
