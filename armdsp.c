@@ -121,14 +121,10 @@ armdsp_read (struct file *filp, char __user *buf, size_t count,
 	unsigned int data_len, total_len;
 	int ret;
 	
-	ret = wait_event_interruptible_timeout (armdsp_wait,
+	ret = wait_event_interruptible (armdsp_wait,
 						(readl (&trgbuf->control)
-						 & TRGBUF_OWNER_MASK),
-						1*HZ);
-	printk ("armdsp_read: %d\n", ret);
-
-	/* returns 0 if timed out */
-	if (ret <= 0)
+						 & TRGBUF_OWNER_MASK));
+	if (ret < 0)
 		return (ret);
 
 	data_len = (readl (&trgbuf->control)
@@ -225,14 +221,14 @@ struct file_operations armdsp_fops = {
 
 static void armdsp_cleanup (void);
 
-static irqreturn_t armdsp_irq (int irq, void *dev_id)
+static irqreturn_t
+armdsp_irq (int irq, void *dev_id)
 {
-	printk ("armdsp_irq\n");
-
 	armdsp_writephys (1, SYSCFG0_ADDR + CHIPSIG_CLR); /* CHIPINT0 */
+	writel (IRQ_DA8XX_CHIPINT0, davinci_soc_info.intc_base + SICR);
 
-	writel (SICR, davinci_soc_info.intc_base + IRQ_DA8XX_CHIPINT0);
 	wake_up (&armdsp_wait);
+
 	return (IRQ_HANDLED);
 }
 
@@ -259,6 +255,10 @@ armdsp_init (void)
 	ret = cdev_add (&armdsp_cdev, armdsp_dev, 1);
 	if (ret)
 		goto cleanup;
+
+	/* clear any pending interrupt */
+	armdsp_writephys (1, SYSCFG0_ADDR + CHIPSIG_CLR); /* CHIPINT0 */
+	writel (IRQ_DA8XX_CHIPINT0, davinci_soc_info.intc_base + SICR);
 
 	ret = request_irq (IRQ_DA8XX_CHIPINT0, armdsp_irq,
 			   IRQF_DISABLED, "armdsp", &armdsp_cdev);

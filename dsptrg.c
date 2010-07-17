@@ -2,6 +2,10 @@
 #include <stdint.h>
 
 #include "trgbuf.h"
+#include "regs-omap-l138.h"
+
+#define readreg(addr) (*(uint32_t volatile *)(addr))
+#define writereg(addr,val) (*(uint32_t volatile *)(addr) = (val))
 
 extern int volatile vector_table[];
 
@@ -37,6 +41,8 @@ writemsg (unsigned char command,
 	
 	control = control | ((1 << TRGBUF_OWNER_SHIFT) & TRGBUF_OWNER_MASK);
 	trgbuf->control = control;
+
+	writereg (SYSCFG0_CHIPSIG, 1); /* CHIPINT0 to arm */
 }
 
 void

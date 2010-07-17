@@ -25,7 +25,7 @@ int vflag;
 void
 usage (void)
 {
-	fprintf (stderr, "usage: hostd\n");
+	fprintf (stderr, "usage: armhost\n");
 	exit (1);
 }
 
@@ -172,10 +172,6 @@ main (int argc, char **argv)
 	while (1) {
 		n = read (dspfd, u.buf, sizeof u.buf);
 		if (n < 0) {
-			if (errno == EAGAIN) {
-				usleep (10 * 1000);
-				continue;
-			}
 			perror ("read");
 			break;
 		}

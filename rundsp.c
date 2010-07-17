@@ -146,10 +146,6 @@ main (int argc, char **argv)
 		exit (1);
 	}
 
-	ioctl (dspfd, ARMDSP_IOCSIMINT, 0);
-	exit (0);
-
-
 	if (ioctl (dspfd, ARMDSP_IOCSTOP, 0) < 0) {
 		perror ("ioctl stop");
 		exit (1);

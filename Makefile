@@ -45,6 +45,8 @@ dsptest.dsp: $(DSPTEST_OBJS) armdsp-link.cmd
 	dis6x dsptest.elf > dsptest.dis
 	nm6x dsptest.elf | sort > dsptest.nm
 
+dsptrg.obj: dsptrg.c regs-omap-l138.h
+
 rundsp: rundsp.c armdsp.h
 	$(ARMCC) -o rundsp rundsp.c
 
