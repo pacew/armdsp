@@ -27,6 +27,7 @@
 #include <linux/cdev.h>
 #include <linux/sched.h>
 #include <linux/interrupt.h>
+#include <linux/poll.h>
 
 #include <asm/uaccess.h>
 #include <asm/cacheflush.h>
@@ -112,6 +113,8 @@ armdsp_run (void)
 
 static DECLARE_WAIT_QUEUE_HEAD (armdsp_wait);
 
+#define armdsp_trgbuf_avail() (readl(&trgbuf->control) & TRGBUF_OWNER_MASK)
+
 ssize_t
 armdsp_read (struct file *filp, char __user *buf, size_t count,
 	     loff_t *f_pos)
@@ -121,9 +124,10 @@ armdsp_read (struct file *filp, char __user *buf, size_t count,
 	unsigned int data_len, total_len;
 	int ret;
 	
-	ret = wait_event_interruptible (armdsp_wait,
-						(readl (&trgbuf->control)
-						 & TRGBUF_OWNER_MASK));
+	if ((filp->f_flags & O_NONBLOCK) != 0 && armdsp_trgbuf_avail () == 0)
+		return (-EAGAIN);
+
+	ret = wait_event_interruptible (armdsp_wait, armdsp_trgbuf_avail());
 	if (ret < 0)
 		return (ret);
 
@@ -209,6 +213,22 @@ armdsp_ioctl(struct inode *inode, struct file *filp,
 	return err;
 }
 
+static unsigned int
+armdsp_poll (struct file *file, poll_table *wait)
+{
+	unsigned int mask;
+
+	poll_wait (file, &armdsp_wait, wait);
+	
+	mask = 0;
+
+	if (armdsp_trgbuf_avail ())
+		mask |= POLLIN | POLLRDNORM;
+
+	mask |= POLLOUT | POLLWRNORM;
+	return (mask);
+}
+
 dev_t armdsp_dev;
 struct cdev armdsp_cdev;
 
@@ -216,7 +236,8 @@ struct file_operations armdsp_fops = {
 	.owner = THIS_MODULE,
 	.read = armdsp_read,
 	.write = armdsp_write,
-	.ioctl = armdsp_ioctl
+	.ioctl = armdsp_ioctl,
+	.poll = armdsp_poll,
 };
 
 static void armdsp_cleanup (void);
