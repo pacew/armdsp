@@ -119,7 +119,7 @@ static ssize_t
 armdsp_read (struct file *filp, char __user *buf, size_t count,
 	     loff_t *f_pos)
 {
-	/* just 72 bytes */
+	/* 268 bytes */
 	unsigned char locbuf[sizeof (struct trgbuf) + TRGBUF_BUFSIZ];
 	unsigned int data_len, total_len;
 	int ret;
@@ -153,7 +153,7 @@ armdsp_write (struct file *filp, const char __user *buf, size_t count,
 	union {
 		struct trgbuf trgbuf;
 		unsigned char buf[sizeof (struct trgbuf) + TRGBUF_BUFSIZ];
-	} loc; /* just 72 bytes */
+	} loc; /* 268 bytes */
 	
 	if (count > sizeof loc)
 		return (-EINVAL);
@@ -161,11 +161,12 @@ armdsp_write (struct file *filp, const char __user *buf, size_t count,
 	if (copy_from_user (loc.buf, buf, count))
 		return (-EFAULT);
 
+	/* make sure arm keeps ownership until all the data is in place */
 	loc.trgbuf.control |= TRGBUF_OWNER_MASK;
 	memcpy_toio (trgbuf, loc.buf, count);
 
-	loc.trgbuf.control &= ~TRGBUF_OWNER_MASK;
-	writel (loc.trgbuf.control, &trgbuf->control);
+	/* now give ownership back to dsp */
+	writel (loc.trgbuf.control & ~TRGBUF_OWNER_MASK, &trgbuf->control);
 
 	return (count);
 }
