@@ -293,15 +293,15 @@ armdsp_cleanup (void)
 		free_irq (IRQ_DA8XX_CHIPINT0, &armdsp_cdev);
 	}
 
+	if (armdsp_dev) {
+		unregister_chrdev_region (armdsp_dev, 1);
+		armdsp_dev = 0;
+	}
+
 	if (armdsp_comm) {
 		trgbuf = NULL;
 		iounmap (armdsp_comm);
 		armdsp_comm = NULL;
-	}
-
-	if (armdsp_dev) {
-		unregister_chrdev_region (armdsp_dev, 1);
-		armdsp_dev = 0;
 	}
 }
 
