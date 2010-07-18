@@ -22,3 +22,4 @@ regs-omap-l138.h
 armnet
 armnet.arm
 dsptest
+libarmdsp.a

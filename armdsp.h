@@ -18,7 +18,7 @@
 #define ARMDSP_COMM_TRGBUF_SIZE (4+8+256)
 
 #define ARMDSP_COMM_USER 0x800
-/* application has 2048 bytes here */
+#define ARMDSP_COMM_USER_SIZE 0x800
 
 #define ARMDSP_COMM_SIZE 0x1000
 
@@ -35,6 +35,8 @@ struct armdsp_trgbuf {
 #define ARMDSP_IOC_MAGIC  'a'
 #define ARMDSP_IOCSTOP _IO(ARMDSP_IOC_MAGIC, 47)
 #define ARMDSP_IOCSTART _IO(ARMDSP_IOC_MAGIC, 48)
+#define ARMDSP_IOCWMB _IO(ARMDSP_IOC_MAGIC, 49)
+#define ARMDSP_IOCRMB _IO(ARMDSP_IOC_MAGIC, 50)
 
 #ifndef __KERNEL__
 char *armdsp_init (void);
@@ -43,6 +45,10 @@ void armdsp_host (void);
 
 int armdsp_verbose;
 int armdsp_fd;
+
+void *armdsp_sram;
+void *armdsp_dram;
+
 #endif /* __KERNEL__ */
 
 #endif /* _ARMDSP_H_ */

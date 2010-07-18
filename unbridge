@@ -1,0 +1,4 @@
+ifconfig br0 down
+brctl delbr br0
+ifconfig eth0 192.168.1.12 -promisc
+route add default gw 192.168.1.1

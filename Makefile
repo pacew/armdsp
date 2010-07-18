@@ -103,6 +103,7 @@ clean:
 	rm -f Module.symvers modules.order
 	rm -f regs-omap-l138.h
 	rm -rf .tmp_versions .*.cmd
+	rm -f libarmdsp.a
 	$(MAKE) -C example clean
 
 endif

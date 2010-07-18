@@ -9,8 +9,6 @@
 #include <sys/wait.h>
 #include "armdsp.h"
 
-static unsigned char *sram;
-static unsigned char *dram;
 
 static int
 read_prog (char const *filename)
@@ -51,12 +49,12 @@ read_prog (char const *filename)
 		if (addr >= ARMDSP_SRAM_BASE
 		    && addr < ARMDSP_SRAM_BASE + ARMDSP_SRAM_SIZE) {
 			addr -= ARMDSP_SRAM_BASE;
-			base = sram;
+			base = armdsp_sram;
 			size = ARMDSP_SRAM_SIZE;
 		} else if (addr >= ARMDSP_DRAM_BASE
 			   && addr < ARMDSP_DRAM_BASE + ARMDSP_DRAM_SIZE) {
 			addr -= ARMDSP_DRAM_BASE;
-			base = dram;
+			base = armdsp_dram;
 			size = ARMDSP_DRAM_SIZE;
 		} else {
 			printf ("invalid addr 0x%x\n", addr);
@@ -96,19 +94,19 @@ armdsp_init (void)
 		if ((memfd = open ("/dev/mem", O_RDWR)) < 0)
 			return ("armdsp_init: can't open /dev/mem");
 
-		sram = mmap (NULL, ARMDSP_SRAM_SIZE,
-			     PROT_READ | PROT_WRITE,
-			     MAP_SHARED, memfd,
-			     ARMDSP_SRAM_BASE);
-		if (sram == MAP_FAILED)
+		armdsp_sram = mmap (NULL, ARMDSP_SRAM_SIZE,
+				    PROT_READ | PROT_WRITE,
+				    MAP_SHARED, memfd,
+				    ARMDSP_SRAM_BASE);
+		if (armdsp_sram == MAP_FAILED)
 			return ("armdsp_init: can't mmap sram");
 
 
-		dram = mmap (NULL, ARMDSP_DRAM_SIZE,
-			     PROT_READ | PROT_WRITE,
-			     MAP_SHARED, memfd,
-			     ARMDSP_DRAM_BASE);
-		if (dram == MAP_FAILED)
+		armdsp_dram = mmap (NULL, ARMDSP_DRAM_SIZE,
+				    PROT_READ | PROT_WRITE,
+				    MAP_SHARED, memfd,
+				    ARMDSP_DRAM_BASE);
+		if (armdsp_dram == MAP_FAILED)
 			return ("armdsp_init: can't mmap dram");
 
 		if ((armdsp_fd = open ("/dev/armdsp0",O_RDWR|O_NONBLOCK))<0)

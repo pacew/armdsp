@@ -31,6 +31,10 @@
 
 #include "armdsp.h"
 
+/* the arm kernel thinks it's a uniprocessor, so nops wmb(), etc */
+#define armdsp_wmb() do { dsb(); } while (0)
+#define armdsp_rmb() do { dmb(); } while (0)
+
 #define ARMDSP_NDEV 2
 
 static dev_t armdsp_dev;
@@ -110,7 +114,7 @@ armdsp_read (struct file *filp, char __user *buf, size_t count,
 			if (ret < 0)
 				return (ret);
 		}
-		rmb ();
+		armdsp_rmb ();
 		length = trgbuf->length;
 		if (length > count || length > sizeof trgbuf->buf)
 			return (-EINVAL);
@@ -148,7 +152,7 @@ armdsp_write (struct file *filp, const char __user *buf, size_t count,
 		/* flush WB */
 		clean_dcache_area (trgbuf,
 				   &trgbuf->buf[count] - (uint8_t *)trgbuf);
-		wmb ();
+		armdsp_wmb ();
 		trgbuf->owner = ARMDSP_TRGBUF_OWNER_DSP;
 		return (count);
 	}
@@ -179,7 +183,7 @@ armdsp_ioctl (struct inode *inode, struct file *filp,
 			break;
 		}
 		flush_cache_all ();
-		wmb ();
+		armdsp_wmb ();
 
 		val = armdsp_readphys (PSC0_ADDR + MDSTAT15);
 		if ((val & MDSTAT_STATE_MASK) != MDCTL_ENABLE) {
@@ -202,6 +206,14 @@ armdsp_ioctl (struct inode *inode, struct file *filp,
 		/* un-assert reset */
 		val = armdsp_readphys (PSC0_ADDR + MDCTL15);
 		armdsp_writephys (val | MDCTL_LRESET, PSC0_ADDR + MDCTL15);
+		break;
+
+	case ARMDSP_IOCWMB:
+		armdsp_wmb ();
+		break;
+
+	case ARMDSP_IOCRMB:
+		armdsp_rmb ();
 		break;
 
 	default:
@@ -259,7 +271,7 @@ armdsp_irq (int irq, void *dev_id)
 	armdsp_writephys (dp->chipint_mask, SYSCFG0_ADDR + CHIPSIG_CLR);
 	writel (dp->irq, davinci_soc_info.intc_base + SICR);
 	set_bit (0, &dp->pending);
-	wmb ();
+	armdsp_wmb ();
 	wake_up (&dp->wait);
 	return (IRQ_HANDLED);
 }
