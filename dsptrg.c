@@ -2,7 +2,6 @@
 #include <stdint.h>
 
 #include "armdsp.h"
-#include "trgbuf.h"
 #include "regs-omap-l138.h"
 
 #define readreg(addr) (*(uint32_t volatile *)(addr))
@@ -21,60 +20,57 @@ writemsg (unsigned char command,
 	  const char *data,
 	  unsigned int length)
 {
-	struct trgbuf volatile *trgbuf;
-	int i;
-	uint32_t control;
-	char *outp;
+	struct armdsp_trgbuf volatile *trgbuf;
+	uint8_t *p;
 
-	trgbuf = (struct trgbuf volatile *)
+	if (1 + 8 + length > ARMDSP_COMM_TRGBUF_SIZE)
+		exit (1);
+
+	trgbuf = (struct armdsp_trgbuf volatile *)
 		((unsigned char *)vector_table + ARMDSP_COMM_TRGBUF);
+	p = (uint8_t *)trgbuf->buf;
+	*p++ = command;
+	memcpy (p, params, 8);
+	p += 8;
+	memcpy (p, data, length);
+	p += length;
 
-	control = (command << TRGBUF_COMMAND_SHIFT)
-		| (length << TRGBUF_LENGTH_SHIFT);
-	trgbuf->control = control;
-	for (i = 0; i < 8; i++)
-		trgbuf->params[i] = params[i];
-	outp = (char *)trgbuf + sizeof (struct trgbuf);
-	for (i = 0; i < length; i++)
-		outp[i] = data[i];
+	trgbuf->length = p - trgbuf->buf;
 
 	/* want to drain write buffers here */
-	
-	control = control | ((1 << TRGBUF_OWNER_SHIFT) & TRGBUF_OWNER_MASK);
-	trgbuf->control = control;
 
+	trgbuf->owner = ARMDSP_TRGBUF_OWNER_ARM;
 	writereg (SYSCFG0_CHIPSIG, 1); /* CHIPINT0 to arm */
 }
 
 void
 readmsg (unsigned char *params, char *data)
 {
-	struct trgbuf volatile *trgbuf;
+	struct armdsp_trgbuf volatile *trgbuf;
 
-	int i, length;
-	char *inp;
-	uint32_t control, owner;
+	uint32_t length;
+	uint8_t *inp;
 
-	trgbuf = (struct trgbuf volatile *)
+	trgbuf = (struct armdsp_trgbuf volatile *)
 		((unsigned char *)vector_table + ARMDSP_COMM_TRGBUF);
-
 
 	while (1) {
 		/* want to flush cache here */
-
-		control = trgbuf->control;
-		owner = (control & TRGBUF_OWNER_MASK) >> TRGBUF_OWNER_SHIFT;
-		if (owner == 0)
+		if (trgbuf->owner == ARMDSP_TRGBUF_OWNER_DSP)
 			break;
 	}
 
-	length = (control & TRGBUF_LENGTH_MASK) >> TRGBUF_LENGTH_SHIFT;
+	length = trgbuf->length;
 
-	for (i = 0; i < 8; i++)
-		params[i] = trgbuf->params[i];
+	if (length < 8)
+		exit (1);
 
-	inp = (char *)trgbuf + sizeof (struct trgbuf);
-	for (i = 0; i < length; i++)
-		data[i] = inp[i];
+	inp = (uint8_t *)trgbuf->buf;
+	memcpy (params, inp, 8);
 
+	if (data) {
+		inp += 8;
+		length -= 8;
+		memcpy (data, inp, length);
+	}
 }

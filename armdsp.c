@@ -15,12 +15,6 @@
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
-
-/*
- * this module was partly inspired by dsploader.c by Tobias Knutsson,
- * 2009-6-24
- */
-
 #include <linux/module.h>
 #include <linux/io.h>
 #include <linux/fs.h>
@@ -35,7 +29,6 @@
 
 #include <mach/common.h>
 
-#include "trgbuf.h"
 #include "armdsp.h"
 
 #define ARMDSP_NDEV 2
@@ -49,16 +42,12 @@ struct armdsp {
 	wait_queue_head_t wait;
 	unsigned long pending;
 	uint32_t chipint_mask;
-	union {
-		struct trgbuf trgbuf;
-		unsigned char buf[sizeof (struct trgbuf) + TRGBUF_BUFSIZ];
-	} u;
 };
 
 static struct armdsp armdsp[ARMDSP_NDEV];
 
 static void *armdsp_comm;
-static struct trgbuf *trgbuf;
+static struct armdsp_trgbuf *trgbuf;
 
 #define SYSCFG0_ADDR 0x01c14000
 #define HOST1CFG_OFFSET 0x44
@@ -129,45 +118,36 @@ armdsp_run (void)
 	armdsp_writephys (val | MDCTL_LRESET, PSC0_ADDR + MDCTL15);
 }
 
-#define armdsp_trgbuf_avail() (readl(&trgbuf->control) & TRGBUF_OWNER_MASK)
-
 static ssize_t
 armdsp_read (struct file *filp, char __user *buf, size_t count,
 	     loff_t *f_pos)
 {
 	unsigned int minor = iminor (filp->f_path.dentry->d_inode);
 	struct armdsp *dp = &armdsp[minor];
-
-	unsigned int data_len, total_len;
+	uint32_t length;
 	int ret;
 	
 	switch (minor) {
 	case 0:
-		if (! armdsp_trgbuf_avail ()) {
+		if (trgbuf->owner != ARMDSP_TRGBUF_OWNER_ARM) {
 			if (filp->f_flags & O_NONBLOCK)
 				return (-EAGAIN);
-		
-			ret = wait_event_interruptible (dp->wait,
-							armdsp_trgbuf_avail());
+			ret = wait_event_interruptible
+				(dp->wait,
+				 trgbuf->owner == ARMDSP_TRGBUF_OWNER_ARM);
 			if (ret < 0)
 				return (ret);
 		}
-
-		data_len = (readl (&trgbuf->control) & TRGBUF_LENGTH_MASK)
-			>> TRGBUF_LENGTH_SHIFT;
-		total_len = sizeof (struct trgbuf) + data_len;
-		if (total_len > sizeof dp->u.buf || total_len > count)
+		length = trgbuf->length;
+		if (length > count || length > sizeof trgbuf->buf)
 			return (-EINVAL);
-		memcpy_fromio (dp->u.buf, trgbuf, total_len);
-		if (copy_to_user (buf, dp->u.buf, total_len))
+		if (copy_to_user (buf, trgbuf->buf, length))
 			return (-EFAULT);
-		return (total_len);
-
+		return (length);
 	case 1:
 		while (test_and_clear_bit (0, &dp->pending) == 0) {
 			if (filp->f_flags & O_NONBLOCK)
 				return (-EAGAIN);
-			
 			ret = wait_event_interruptible
 				(dp->wait, test_bit (0, &dp->pending));
 			if (ret < 0)
@@ -176,7 +156,7 @@ armdsp_read (struct file *filp, char __user *buf, size_t count,
 		return (0);
 	}
 
-	return (-ENODEV);
+	return (-EINVAL);
 }
 
 static ssize_t
@@ -184,53 +164,56 @@ armdsp_write (struct file *filp, const char __user *buf, size_t count,
 	      loff_t *f_pos)
 {
 	unsigned int minor = iminor (filp->f_path.dentry->d_inode);
-	struct armdsp *dp = &armdsp[minor];
 	
-	if (minor != 0)
-		return (-EINVAL);
+	switch (minor) {
+	case 0:
+		if (count > sizeof trgbuf->buf)
+			return (-EINVAL);
+		if (copy_from_user (trgbuf->buf, buf, count))
+			return (-EFAULT);
+		trgbuf->length = count;
+		/* flush WB */
+		clean_dcache_area (trgbuf,
+				   &trgbuf->buf[count] - (uint8_t *)trgbuf);
+		wmb ();
+		trgbuf->owner = ARMDSP_TRGBUF_OWNER_DSP;
+		return (count);
+	}
 
-	if (count > sizeof dp->u.buf)
-		return (-EINVAL);
-
-	if (copy_from_user (dp->u.buf, buf, count))
-		return (-EFAULT);
-
-	/* make sure arm keeps ownership until all the data is in place */
-	dp->u.trgbuf.control |= TRGBUF_OWNER_MASK;
-	memcpy_toio (trgbuf, dp->u.buf, count);
-
-	/* now give ownership back to dsp */
-	writel (dp->u.trgbuf.control & ~TRGBUF_OWNER_MASK, &trgbuf->control);
-
-	return (count);
+	return (-EINVAL);
 }
 
 static int
-armdsp_ioctl(struct inode *inode, struct file *filp,
-	     unsigned int cmd, unsigned long arg)
+armdsp_ioctl (struct inode *inode, struct file *filp,
+	      unsigned int cmd, unsigned long arg)
 {
 	unsigned int minor = iminor (filp->f_path.dentry->d_inode);
 	int err = 0;
-	    
-	if (minor != 0)
-		return (-ENOTTY);
 
 	switch(cmd) {
 	case ARMDSP_IOCSTOP:
+		if (minor != 0) {
+			err = -ENOTTY;
+			break;
+		}
 		armdsp_reset ();
 		break;
 
 	case ARMDSP_IOCSTART:
+		if (minor != 0) {
+			err = -ENOTTY;
+			break;
+		}
 		flush_cache_all ();
 		wmb ();
-
 		armdsp_run();
 		break;
 
-	  default:
-		return -ENOTTY;
+	default:
+		err = -ENOTTY;
+		break;
 	}
-	return err;
+	return (err);
 }
 
 static unsigned int
@@ -246,7 +229,7 @@ armdsp_poll (struct file *filp, poll_table *wait)
 	mask = 0;
 	switch (minor) {
 	case 0:
-		if (armdsp_trgbuf_avail ())
+		if (trgbuf->owner == ARMDSP_TRGBUF_OWNER_ARM)
 			mask |= POLLIN | POLLRDNORM;
 		break;
 	case 1:
@@ -282,7 +265,6 @@ armdsp_irq (int irq, void *dev_id)
 	writel (dp->irq, davinci_soc_info.intc_base + SICR);
 	set_bit (0, &dp->pending);
 	wake_up (&dp->wait);
-
 	return (IRQ_HANDLED);
 }
 
@@ -296,6 +278,16 @@ armdsp_init (void)
 	int ret = 0;
 
 	armdsp_reset ();
+
+	for (minor = 0; minor < ARMDSP_NDEV; minor++) {
+		dp = &armdsp[minor];
+		init_waitqueue_head (&dp->wait);
+		dp->irq = IRQ_DA8XX_CHIPINT0 + minor;
+		dp->chipint_mask = 1 << minor;
+
+		armdsp_writephys (dp->chipint_mask, SYSCFG0_ADDR + CHIPSIG_CLR);
+		writel (dp->irq, davinci_soc_info.intc_base + SICR);
+	}
 
 	armdsp_comm = ioremap (ARMDSP_COMM_PHYS, ARMDSP_COMM_SIZE);
 	if (armdsp_comm == NULL) {
@@ -319,13 +311,6 @@ armdsp_init (void)
 
 	for (minor = 0; minor < ARMDSP_NDEV; minor++) {
 		dp = &armdsp[minor];
-		init_waitqueue_head (&dp->wait);
-		dp->irq = IRQ_DA8XX_CHIPINT0 + minor;
-		dp->chipint_mask = 1 << minor;
-
-		armdsp_writephys (dp->chipint_mask, SYSCFG0_ADDR + CHIPSIG_CLR);
-		writel (dp->irq, davinci_soc_info.intc_base + SICR);
-
 		ret = request_irq (dp->irq, armdsp_irq,
 				   IRQF_DISABLED, "armdsp", &armdsp_cdev);
 		if (ret)

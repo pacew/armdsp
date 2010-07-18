@@ -1,11 +1,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <memory.h>
 #include <fcntl.h>
 #include <stdint.h>
 #include <errno.h>
 
-#include "trgbuf.h"
+#include "armdsp.h"
 
 /* from rtssrc / trgcio.h */
 #define _DTOPEN    (0xF0)
@@ -80,23 +81,23 @@ get2le (unsigned char **upp)
 }
 
 /* rtssrc/SHARED/trgdrv.c */
-int
-handle_write (struct trgbuf *tp, void *datap, int length)
+void
+handle_write (uint8_t *params, void *datap, int datalen)
 {
-	unsigned char *up;
+	uint8_t *up;
 	int fd, count;
 	short ret;
+	uint8_t retbuf[8];
 
-	up = tp->params;
+	up = params;
 	fd = get2le (&up);
 	count = get2le (&up);
 
 	if (vflag)
 		printf ("write(%d,...,%d)\n", fd, count);
 
-	if (count > length) {
-		fprintf (stderr, "write: invalid count %d %d\n",
-			 count, length);
+	if (count != datalen) {
+		printf ("proto error\n");
 		exit (1);
 	}
 
@@ -106,20 +107,21 @@ handle_write (struct trgbuf *tp, void *datap, int length)
 		ret = -1;
 	}
 
-	up = tp->params;
+	memset (retbuf, 0, sizeof retbuf);
+	up = retbuf;
 	put2le (&up, ret);
-
-	return (0);
+	write (dspfd, retbuf, 8);
 }
 
-int
-handle_close (struct trgbuf *tp, void *datap, int length)
+void
+handle_close (uint8_t *params, void *datap, int datalen)
 {
 	short ret;
 	unsigned char *up;
 	int fd;
+	uint8_t retbuf[8];
 
-	up = tp->params;
+	up = params;
 	fd = get2le (&up);
 
 	if (vflag)
@@ -127,27 +129,23 @@ handle_close (struct trgbuf *tp, void *datap, int length)
 
 	ret = 0;
 
-	up = tp->params;
+	memset (retbuf, 0, sizeof retbuf);
+	up = retbuf;
 	put2le (&up, ret);
-
-	return (0);
+	write (dspfd, retbuf, 8);
 }
 
 int
 main (int argc, char **argv)
 {
 	int c;
-	union {
-		struct trgbuf trgbuf;
-		unsigned char buf[sizeof (struct trgbuf) + TRGBUF_BUFSIZ];
-	} u;
-
-	struct trgbuf *tp;
+	uint8_t tbuf[ARMDSP_COMM_TRGBUF_SIZE];
+	uint8_t *params;
 	ssize_t n;
 	void *datap;
 	int i;
 	int command;
-	int length;
+	int datalen;
 
 	while ((c = getopt (argc, argv, "v")) != EOF) {
 		switch (c) {
@@ -168,47 +166,39 @@ main (int argc, char **argv)
 	}
 
 	while (1) {
-		n = read (dspfd, u.buf, sizeof u.buf);
+		n = read (dspfd, tbuf, sizeof tbuf);
 		if (n < 0) {
 			perror ("read");
 			break;
 		}
-		tp = &u.trgbuf;
 
-		command = (tp->control & TRGBUF_COMMAND_MASK)
-			>> TRGBUF_COMMAND_SHIFT;
-		length = (tp->control & TRGBUF_LENGTH_MASK)
-			>> TRGBUF_LENGTH_SHIFT;
-
-		if (length > TRGBUF_BUFSIZ) {
-			fprintf (stderr, "invalid length %d\n", length);
+		if (n < 9) {
+			fprintf (stderr, "proto error\n");
 			exit (1);
 		}
 
-		datap = &u.buf[sizeof (struct trgbuf)];
+		command = tbuf[0];
+		params = tbuf + 1;
+		datap = tbuf + 9;
+		datalen = n - 9;
 
 		switch (command) {
 		case _DTWRITE:
-			length = handle_write (tp, datap, length);
+			handle_write (params, datap, datalen);
 			break;
 		case _DTCLOSE:
-			length = handle_close (tp, datap, length);
+			handle_close (params, datap, datalen);
 			break;
 		default:
 			printf ("unknown command 0x%x\n", command);
 			printf ("params ");
 			for (i = 0; i < 8; i++)
-				printf ("%02x ", tp->params[i]);
+				printf ("%02x ", params[i]);
 			printf ("\n");
-			printf ("length %d\n", length);
-			dump (datap, length, 0);
+			printf ("datalen %d\n", datalen);
+			dump (datap, datalen, 0);
 			exit (1);
 		}
-
-		/* write response - just update length */
-		tp->control = (tp->control & ~TRGBUF_LENGTH_MASK)
-			| (length << TRGBUF_LENGTH_SHIFT);
-		write (dspfd, tp, sizeof (struct trgbuf) + length);
 	}
 
 	return (0);

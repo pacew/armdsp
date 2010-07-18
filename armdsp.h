@@ -5,11 +5,22 @@
  * communication area is first page of shared ram
  */
 #define ARMDSP_COMM_PHYS 0x80000000
-
-#define ARMDSP_COMM_VECS 0 /* 512 (0x200) bytes */
-#define ARMDSP_COMM_TRGBUF 0x800 /* 20 + 256 bytes */
-
 #define ARMDSP_COMM_SIZE 0x1000
+
+#define ARMDSP_COMM_VECS 0
+/* vector table size is 0x200 */
+#define ARMDSP_COMM_TRGBUF 0x200
+#define ARMDSP_COMM_TRGBUF_SIZE (4+8+256)
+
+struct armdsp_trgbuf {
+	uint32_t owner;
+	uint32_t length;
+	uint8_t buf[ARMDSP_COMM_TRGBUF_SIZE];
+};
+
+#define ARMDSP_TRGBUF_OWNER_DSP 0
+#define ARMDSP_TRGBUF_OWNER_ARM 1
+
 
 #define ARMDSP_IOC_MAGIC  'a'
 #define ARMDSP_IOCSTOP _IO(ARMDSP_IOC_MAGIC, 47)
