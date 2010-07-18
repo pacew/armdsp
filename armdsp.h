@@ -17,6 +17,9 @@
 #define ARMDSP_COMM_TRGBUF 0x200
 #define ARMDSP_COMM_TRGBUF_SIZE (4+8+256)
 
+#define ARMDSP_COMM_USER 0x800
+/* application has 2048 bytes here */
+
 #define ARMDSP_COMM_SIZE 0x1000
 
 struct armdsp_trgbuf {

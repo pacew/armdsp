@@ -110,6 +110,7 @@ armdsp_read (struct file *filp, char __user *buf, size_t count,
 			if (ret < 0)
 				return (ret);
 		}
+		rmb ();
 		length = trgbuf->length;
 		if (length > count || length > sizeof trgbuf->buf)
 			return (-EINVAL);
@@ -258,6 +259,7 @@ armdsp_irq (int irq, void *dev_id)
 	armdsp_writephys (dp->chipint_mask, SYSCFG0_ADDR + CHIPSIG_CLR);
 	writel (dp->irq, davinci_soc_info.intc_base + SICR);
 	set_bit (0, &dp->pending);
+	wmb ();
 	wake_up (&dp->wait);
 	return (IRQ_HANDLED);
 }

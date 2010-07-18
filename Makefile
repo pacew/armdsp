@@ -75,19 +75,19 @@ install: all
 	mkdir -p -m 755 $(ARMDSP_DIR)/arm/lib
 	mkdir -p -m 755 $(ARMDSP_DIR)/dsp
 	mkdir -p -m 755 $(ARMDSP_DIR)/include
-	install -c -m 755 armdsp-link $(ARMDSP_DIR)/bin/.
-	install -c -m 644 Makefile.armdsp $(ARMDSP_DIR)/.
-	install -c -m 644 armdsp.ko $(ARMDSP_DIR)/arm/.
-	install -c -m 755 rundsp $(ARMDSP_DIR)/arm/.
-	install -c -m 755 armhost $(ARMDSP_DIR)/arm/.
-	install -c -m 755 armdsp-ldmod $(ARMDSP_DIR)/arm/.
-	install -c -m 644 libarmdsp.a $(ARMDSP_DIR)/arm/lib/.
-	install -c -m 644 dsptest $(ARMDSP_DIR)/dsp/.
-	install -c -m 644 vecs.obj $(ARMDSP_DIR)/dsp/.
-	install -c -m 644 dsptrg.obj $(ARMDSP_DIR)/dsp/.
-	install -c -m 644 armdsp-link.cmd $(ARMDSP_DIR)/dsp/.
-	install -c -m 644 regs-omap-l138.h $(ARMDSP_DIR)/include/.
-	install -c -m 644 armdsp.h $(ARMDSP_DIR)/include/.
+	install -c -m 555 armdsp-link $(ARMDSP_DIR)/bin/.
+	install -c -m 444 Makefile.armdsp $(ARMDSP_DIR)/.
+	install -c -m 444 armdsp.ko $(ARMDSP_DIR)/arm/.
+	install -c -m 555 rundsp $(ARMDSP_DIR)/arm/.
+	install -c -m 555 armhost $(ARMDSP_DIR)/arm/.
+	install -c -m 555 armdsp-ldmod $(ARMDSP_DIR)/arm/.
+	install -c -m 444 libarmdsp.a $(ARMDSP_DIR)/arm/lib/.
+	install -c -m 444 dsptest $(ARMDSP_DIR)/dsp/.
+	install -c -m 444 vecs.obj $(ARMDSP_DIR)/dsp/.
+	install -c -m 444 dsptrg.obj $(ARMDSP_DIR)/dsp/.
+	install -c -m 444 armdsp-link.cmd $(ARMDSP_DIR)/dsp/.
+	install -c -m 444 regs-omap-l138.h $(ARMDSP_DIR)/include/.
+	install -c -m 444 armdsp.h $(ARMDSP_DIR)/include/.
 
 test: all
 	install -c -m 644 armdsp.ko $(ARMDSP_NFSROOT)/.
