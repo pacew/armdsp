@@ -32,7 +32,7 @@ CL6X_FLAGS = --abi=eabi
 # ================================================================
 
 all: armdsp.ko dsptest rundsp armhost regdefs regs-omap-l138.h \
-	armnet armnet.arm
+	armnet armnet.arm libarmdsp.a
 
 armdsp.ko: armdsp.c armdsp.h
 	$(MAKE) -C $(KERNELDIR) M=$(PWD) modules
@@ -65,9 +65,14 @@ regdefs: regdefs.c
 regs-omap-l138.h: regdefs regs.conf
 	./regdefs
 
+libarmdsp.a: libarmdsp.c
+	$(ARMCC) -c libarmdsp.c
+	rm -f libarmdsp.a
+	$(CROSS_COMPILE)ar r libarmdsp.a libarmdsp.o
+
 install: all
 	mkdir -p -m 755 $(ARMDSP_DIR)/bin
-	mkdir -p -m 755 $(ARMDSP_DIR)/arm
+	mkdir -p -m 755 $(ARMDSP_DIR)/arm/lib
 	mkdir -p -m 755 $(ARMDSP_DIR)/dsp
 	mkdir -p -m 755 $(ARMDSP_DIR)/include
 	install -c -m 755 armdsp-link $(ARMDSP_DIR)/bin/.
@@ -76,11 +81,13 @@ install: all
 	install -c -m 755 rundsp $(ARMDSP_DIR)/arm/.
 	install -c -m 755 armhost $(ARMDSP_DIR)/arm/.
 	install -c -m 755 armdsp-ldmod $(ARMDSP_DIR)/arm/.
+	install -c -m 644 libarmdsp.a $(ARMDSP_DIR)/arm/lib/.
 	install -c -m 644 dsptest $(ARMDSP_DIR)/dsp/.
 	install -c -m 644 vecs.obj $(ARMDSP_DIR)/dsp/.
 	install -c -m 644 dsptrg.obj $(ARMDSP_DIR)/dsp/.
 	install -c -m 644 armdsp-link.cmd $(ARMDSP_DIR)/dsp/.
 	install -c -m 644 regs-omap-l138.h $(ARMDSP_DIR)/include/.
+	install -c -m 644 armdsp.h $(ARMDSP_DIR)/include/.
 
 test: all
 	install -c -m 644 armdsp.ko $(ARMDSP_NFSROOT)/.
