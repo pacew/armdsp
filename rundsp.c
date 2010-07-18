@@ -141,8 +141,8 @@ main (int argc, char **argv)
 		exit (1);
 	}
 
-	if ((dspfd = open ("/dev/armdsp", O_RDONLY)) < 0) {
-		perror ("open /dev/armdsp");
+	if ((dspfd = open ("/dev/armdsp0", O_RDONLY)) < 0) {
+		perror ("open /dev/armdsp0");
 		exit (1);
 	}
 

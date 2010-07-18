@@ -1,4 +1,8 @@
 #include <stdio.h>
+#include <stdint.h>
+#include "regs-omap-l138.h"
+
+#define writereg(addr,val) (*(uint32_t volatile *)(addr) = (val))
 
 double x = 3.14;
 
@@ -14,6 +18,9 @@ main (int argc, char **argv)
 	for (i = 0; i < 8; i++)
 		printf ("%02x ", p[i]);
 	printf ("\n");
+
+	writereg (SYSCFG0_CHIPSIG, 2); /* CHIPINT1 to arm */
+
 	return (0);
 }
 

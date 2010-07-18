@@ -162,12 +162,10 @@ main (int argc, char **argv)
 	if (optind != argc)
 		usage ();
 
-	if ((dspfd = open ("/dev/armdsp", O_RDWR)) < 0) {
+	if ((dspfd = open ("/dev/armdsp0", O_RDWR)) < 0) {
 		perror ("open armdsp");
 		exit (1);
 	}
-
-	printf ("ready\n");
 
 	while (1) {
 		n = read (dspfd, u.buf, sizeof u.buf);

@@ -31,11 +31,34 @@
 
 #include <asm/uaccess.h>
 #include <asm/cacheflush.h>
+#include <asm/atomic.h>
 
 #include <mach/common.h>
 
 #include "trgbuf.h"
 #include "armdsp.h"
+
+#define ARMDSP_NDEV 2
+
+static dev_t armdsp_dev;
+static struct cdev armdsp_cdev;
+
+struct armdsp {
+	int irq;
+	int have_irq;
+	wait_queue_head_t wait;
+	unsigned long pending;
+	uint32_t chipint_mask;
+	union {
+		struct trgbuf trgbuf;
+		unsigned char buf[sizeof (struct trgbuf) + TRGBUF_BUFSIZ];
+	} u;
+};
+
+static struct armdsp armdsp[ARMDSP_NDEV];
+
+static void *armdsp_comm;
+static struct trgbuf *trgbuf;
 
 #define SYSCFG0_ADDR 0x01c14000
 #define HOST1CFG_OFFSET 0x44
@@ -64,11 +87,6 @@
 #define MDCTL_STATE_MASK 	0x07
 #define MDCTL_ENABLE		0x03
 #define MDCTL_LRESET		(1<<8)
-
-static void *armdsp_comm;
-static struct trgbuf *trgbuf;
-static int have_irq_chipint0;
-
 
 #define armdsp_readphys(addr) (readl(IO_ADDRESS(addr)))
 #define armdsp_writephys(val,addr) (writel(val,IO_ADDRESS(addr)))
@@ -111,62 +129,78 @@ armdsp_run (void)
 	armdsp_writephys (val | MDCTL_LRESET, PSC0_ADDR + MDCTL15);
 }
 
-static DECLARE_WAIT_QUEUE_HEAD (armdsp_wait);
-
 #define armdsp_trgbuf_avail() (readl(&trgbuf->control) & TRGBUF_OWNER_MASK)
 
 static ssize_t
 armdsp_read (struct file *filp, char __user *buf, size_t count,
 	     loff_t *f_pos)
 {
-	/* 268 bytes */
-	unsigned char locbuf[sizeof (struct trgbuf) + TRGBUF_BUFSIZ];
+	unsigned int minor = iminor (filp->f_path.dentry->d_inode);
+	struct armdsp *dp = &armdsp[minor];
+
 	unsigned int data_len, total_len;
 	int ret;
 	
-	if ((filp->f_flags & O_NONBLOCK) != 0 && armdsp_trgbuf_avail () == 0)
-		return (-EAGAIN);
+	switch (minor) {
+	case 0:
+		if (! armdsp_trgbuf_avail ()) {
+			if (filp->f_flags & O_NONBLOCK)
+				return (-EAGAIN);
+		
+			ret = wait_event_interruptible (dp->wait,
+							armdsp_trgbuf_avail());
+			if (ret < 0)
+				return (ret);
+		}
 
-	ret = wait_event_interruptible (armdsp_wait, armdsp_trgbuf_avail());
-	if (ret < 0)
-		return (ret);
+		data_len = (readl (&trgbuf->control) & TRGBUF_LENGTH_MASK)
+			>> TRGBUF_LENGTH_SHIFT;
+		total_len = sizeof (struct trgbuf) + data_len;
+		if (total_len > sizeof dp->u.buf || total_len > count)
+			return (-EINVAL);
+		memcpy_fromio (dp->u.buf, trgbuf, total_len);
+		if (copy_to_user (buf, dp->u.buf, total_len))
+			return (-EFAULT);
+		return (total_len);
 
-	data_len = (readl (&trgbuf->control) & TRGBUF_LENGTH_MASK)
-		>> TRGBUF_LENGTH_SHIFT;
+	case 1:
+		while (test_and_clear_bit (0, &dp->pending) == 0) {
+			if (filp->f_flags & O_NONBLOCK)
+				return (-EAGAIN);
+			
+			ret = wait_event_interruptible
+				(dp->wait, test_bit (0, &dp->pending));
+			if (ret < 0)
+				return (ret);
+		}
+		return (0);
+	}
 
-	total_len = sizeof (struct trgbuf) + data_len;
-	if (total_len > sizeof locbuf || total_len > count)
-		return (-EINVAL);
-
-	memcpy_fromio (locbuf, trgbuf, total_len);
-
-	if (copy_to_user (buf, locbuf, total_len))
-		return (-EFAULT);
-
-	return (total_len);
+	return (-ENODEV);
 }
 
 static ssize_t
 armdsp_write (struct file *filp, const char __user *buf, size_t count,
 	      loff_t *f_pos)
 {
-	union {
-		struct trgbuf trgbuf;
-		unsigned char buf[sizeof (struct trgbuf) + TRGBUF_BUFSIZ];
-	} loc; /* 268 bytes */
+	unsigned int minor = iminor (filp->f_path.dentry->d_inode);
+	struct armdsp *dp = &armdsp[minor];
 	
-	if (count > sizeof loc)
+	if (minor != 0)
 		return (-EINVAL);
 
-	if (copy_from_user (loc.buf, buf, count))
+	if (count > sizeof dp->u.buf)
+		return (-EINVAL);
+
+	if (copy_from_user (dp->u.buf, buf, count))
 		return (-EFAULT);
 
 	/* make sure arm keeps ownership until all the data is in place */
-	loc.trgbuf.control |= TRGBUF_OWNER_MASK;
-	memcpy_toio (trgbuf, loc.buf, count);
+	dp->u.trgbuf.control |= TRGBUF_OWNER_MASK;
+	memcpy_toio (trgbuf, dp->u.buf, count);
 
 	/* now give ownership back to dsp */
-	writel (loc.trgbuf.control & ~TRGBUF_OWNER_MASK, &trgbuf->control);
+	writel (dp->u.trgbuf.control & ~TRGBUF_OWNER_MASK, &trgbuf->control);
 
 	return (count);
 }
@@ -175,9 +209,12 @@ static int
 armdsp_ioctl(struct inode *inode, struct file *filp,
 	     unsigned int cmd, unsigned long arg)
 {
-
+	unsigned int minor = iminor (filp->f_path.dentry->d_inode);
 	int err = 0;
 	    
+	if (minor != 0)
+		return (-ENOTTY);
+
 	switch(cmd) {
 	case ARMDSP_IOCSTOP:
 		armdsp_reset ();
@@ -197,21 +234,29 @@ armdsp_ioctl(struct inode *inode, struct file *filp,
 }
 
 static unsigned int
-armdsp_poll (struct file *file, poll_table *wait)
+armdsp_poll (struct file *filp, poll_table *wait)
 {
+	unsigned int minor = iminor (filp->f_path.dentry->d_inode);
+	struct armdsp *dp = &armdsp[minor];
+
 	unsigned int mask;
 
-	poll_wait (file, &armdsp_wait, wait);
+	poll_wait (filp, &dp->wait, wait);
 	
 	mask = 0;
-	if (armdsp_trgbuf_avail ())
-		mask |= POLLIN | POLLRDNORM;
+	switch (minor) {
+	case 0:
+		if (armdsp_trgbuf_avail ())
+			mask |= POLLIN | POLLRDNORM;
+		break;
+	case 1:
+		if (test_bit (0, &dp->pending))
+			mask |= POLLIN | POLLRDNORM;
+		break;
+	}
 	mask |= POLLOUT | POLLWRNORM;
 	return (mask);
 }
-
-static dev_t armdsp_dev;
-static struct cdev armdsp_cdev;
 
 static struct file_operations armdsp_fops = {
 	.owner = THIS_MODULE,
@@ -226,23 +271,32 @@ static void armdsp_cleanup (void);
 static irqreturn_t
 armdsp_irq (int irq, void *dev_id)
 {
-	armdsp_writephys (1, SYSCFG0_ADDR + CHIPSIG_CLR); /* CHIPINT0 */
-	writel (IRQ_DA8XX_CHIPINT0, davinci_soc_info.intc_base + SICR);
+	unsigned int minor = irq - IRQ_DA8XX_CHIPINT0;
+	struct armdsp *dp;
 
-	wake_up (&armdsp_wait);
+	if (minor > ARMDSP_NDEV)
+		return (IRQ_NONE);
+
+	dp = &armdsp[minor];
+	armdsp_writephys (dp->chipint_mask, SYSCFG0_ADDR + CHIPSIG_CLR);
+	writel (dp->irq, davinci_soc_info.intc_base + SICR);
+	set_bit (0, &dp->pending);
+	wake_up (&dp->wait);
 
 	return (IRQ_HANDLED);
 }
 
+static int armdsp_need_cdev_del;
+
 static int __init 
 armdsp_init (void)
 {
+	unsigned int minor;
+	struct armdsp *dp;
 	int ret = 0;
 
-	ret = alloc_chrdev_region (&armdsp_dev, 0, 1, "armdsp");
-	if (ret)
-		goto cleanup;
-	
+	armdsp_reset ();
+
 	armdsp_comm = ioremap (ARMDSP_COMM_PHYS, ARMDSP_COMM_SIZE);
 	if (armdsp_comm == NULL) {
 		ret = -ENOMEM;
@@ -251,22 +305,33 @@ armdsp_init (void)
 	trgbuf = armdsp_comm + ARMDSP_COMM_TRGBUF;
 	memset (trgbuf, 0, sizeof *trgbuf);
 
+	ret = alloc_chrdev_region (&armdsp_dev, 0, ARMDSP_NDEV, "armdsp");
+	if (ret)
+		goto cleanup;
+	
 	cdev_init(&armdsp_cdev, &armdsp_fops);
 	armdsp_cdev.owner = THIS_MODULE;
 	armdsp_cdev.ops = &armdsp_fops;
-	ret = cdev_add (&armdsp_cdev, armdsp_dev, 1);
+	ret = cdev_add (&armdsp_cdev, armdsp_dev, ARMDSP_NDEV);
 	if (ret)
 		goto cleanup;
+	armdsp_need_cdev_del = 1;
 
-	/* clear any pending interrupt */
-	armdsp_writephys (1, SYSCFG0_ADDR + CHIPSIG_CLR); /* CHIPINT0 */
-	writel (IRQ_DA8XX_CHIPINT0, davinci_soc_info.intc_base + SICR);
+	for (minor = 0; minor < ARMDSP_NDEV; minor++) {
+		dp = &armdsp[minor];
+		init_waitqueue_head (&dp->wait);
+		dp->irq = IRQ_DA8XX_CHIPINT0 + minor;
+		dp->chipint_mask = 1 << minor;
 
-	ret = request_irq (IRQ_DA8XX_CHIPINT0, armdsp_irq,
-			   IRQF_DISABLED, "armdsp", &armdsp_cdev);
-	if (ret)
-		goto cleanup;
-	have_irq_chipint0 = 1;
+		armdsp_writephys (dp->chipint_mask, SYSCFG0_ADDR + CHIPSIG_CLR);
+		writel (dp->irq, davinci_soc_info.intc_base + SICR);
+
+		ret = request_irq (dp->irq, armdsp_irq,
+				   IRQF_DISABLED, "armdsp", &armdsp_cdev);
+		if (ret)
+			goto cleanup;
+		dp->have_irq = 1;
+	}
 
 	return (0);
 
@@ -284,25 +349,30 @@ armdsp_exit(void)
 static void
 armdsp_cleanup (void)
 {
-	/* clear any pending interrupt */
-	armdsp_writephys (1, SYSCFG0_ADDR + CHIPSIG_CLR); /* CHIPINT0 */
-	writel (IRQ_DA8XX_CHIPINT0, davinci_soc_info.intc_base + SICR);
+	unsigned int minor;
+	struct armdsp *dp;
 
-	if (have_irq_chipint0) {
-		have_irq_chipint0 = 0;
-		free_irq (IRQ_DA8XX_CHIPINT0, &armdsp_cdev);
+	armdsp_reset ();
+
+	for (minor = 0; minor < ARMDSP_NDEV; minor++) {
+		dp = &armdsp[minor];
+
+		if (dp->have_irq) {
+			armdsp_writephys (dp->chipint_mask,
+					  SYSCFG0_ADDR + CHIPSIG_CLR);
+			writel (dp->irq, davinci_soc_info.intc_base + SICR);
+			free_irq (dp->irq, &armdsp_cdev);
+		}
 	}
 
-	if (armdsp_dev) {
-		unregister_chrdev_region (armdsp_dev, 1);
-		armdsp_dev = 0;
-	}
+	if (armdsp_need_cdev_del)
+		cdev_del (&armdsp_cdev);
 
-	if (armdsp_comm) {
-		trgbuf = NULL;
+	if (armdsp_dev)
+		unregister_chrdev_region (armdsp_dev, ARMDSP_NDEV);
+
+	if (armdsp_comm)
 		iounmap (armdsp_comm);
-		armdsp_comm = NULL;
-	}
 }
 
 module_init(armdsp_init);
