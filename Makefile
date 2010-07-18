@@ -31,17 +31,17 @@ CL6X_FLAGS = --abi=eabi
 	$(CL6X) $(CL6X_FLAGS) -c $*.asm
 # ================================================================
 
-all: armdsp.ko dsptest.dsp rundsp armhost regdefs regs-omap-l138.h \
+all: armdsp.ko dsptest rundsp armhost regdefs regs-omap-l138.h \
 	armnet armnet.arm
 
 armdsp.ko: armdsp.c armdsp.h
 	$(MAKE) -C $(KERNELDIR) M=$(PWD) modules
 
 DSPTEST_OBJS = vecs.obj dsptrg.obj dsptest.obj
-dsptest.dsp: $(DSPTEST_OBJS) armdsp-link.cmd
+dsptest: $(DSPTEST_OBJS) armdsp-link.cmd
 	$(CL6X) $(CL6X_FLAGS) -z armdsp-link.cmd $(DSPTEST_OBJS) \
 		--output_file dsptest.elf
-	hex6x -q -m --order=M --romwidth=32 -o=dsptest.dsp dsptest.elf
+	hex6x -q -m --order=M --romwidth=32 -o=dsptest dsptest.elf
 	dis6x dsptest.elf > dsptest.dis
 	nm6x dsptest.elf | sort > dsptest.nm
 
@@ -76,7 +76,7 @@ install: all
 	install -c -m 755 rundsp $(ARMDSP_DIR)/arm/.
 	install -c -m 755 armhost $(ARMDSP_DIR)/arm/.
 	install -c -m 755 armdsp-ldmod $(ARMDSP_DIR)/arm/.
-	install -c -m 644 dsptest.dsp $(ARMDSP_DIR)/dsp/.
+	install -c -m 644 dsptest $(ARMDSP_DIR)/dsp/.
 	install -c -m 644 vecs.obj $(ARMDSP_DIR)/dsp/.
 	install -c -m 644 dsptrg.obj $(ARMDSP_DIR)/dsp/.
 	install -c -m 644 armdsp-link.cmd $(ARMDSP_DIR)/dsp/.
@@ -87,12 +87,12 @@ test: all
 	install -c -m 755 rundsp $(ARMDSP_NFSROOT)/.
 	install -c -m 755 armhost $(ARMDSP_NFSROOT)/.
 	install -c -m 755 armdsp-ldmod $(ARMDSP_NFSROOT)/.
-	install -c -m 644 dsptest.dsp $(ARMDSP_NFSROOT)/.
+	install -c -m 644 dsptest $(ARMDSP_NFSROOT)/.
 
 clean:
 	rm -f *.o *.ko *.obj *.elf *.mod.c *~ .*~ ? *.dis *.nm
 	rm -f dsptest.asm
-	rm -f rundsp armhost dsptest.dsp dsptest.elf regdefs
+	rm -f rundsp armhost dsptest dsptest.elf regdefs
 	rm -f Module.symvers modules.order
 	rm -f regs-omap-l138.h
 	rm -rf .tmp_versions .*.cmd

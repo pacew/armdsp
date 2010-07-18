@@ -10,7 +10,7 @@ shift
 outname=$1
 shift
 
-elfname=`basename $outname .dsp`.elf
+elfname=${outname}.elf
 
 adir=/usr/local/armdsp
 

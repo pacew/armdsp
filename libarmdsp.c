@@ -79,7 +79,7 @@ done:
 
 bad:
 	fclose (f);
-	fprintf (stderr, "bad rec %s\n", buf);
+	fprintf (stderr, "%s: invalid srecord\n", filename);
 	return (-1);
 }
 

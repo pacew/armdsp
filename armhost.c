@@ -12,7 +12,7 @@
 void
 usage (void)
 {
-	fprintf (stderr, "usage: armhost\n");
+	fprintf (stderr, "usage: armhost [prog]\n");
 	exit (1);
 }
 
@@ -22,6 +22,7 @@ main (int argc, char **argv)
 	int c;
 	char *err;
 	fd_set rset;
+	char *prog = NULL;
 
 	while ((c = getopt (argc, argv, "v")) != EOF) {
 		switch (c) {
@@ -33,12 +34,22 @@ main (int argc, char **argv)
 		}
 	}
 
+	if (optind < argc)
+		prog = argv[optind++];
+	
 	if (optind != argc)
 		usage ();
 
 	if ((err = armdsp_init ()) != NULL) {
 		fprintf (stderr, "armdsp_init error: %s\n", err);
 		exit (1);
+	}
+
+	if (prog) {
+		if ((err = armdsp_run (prog)) != NULL) {
+			fprintf (stderr, "armdsp_run error: %s\n", err);
+			exit (1);
+		}
 	}
 
 	while (1) {
