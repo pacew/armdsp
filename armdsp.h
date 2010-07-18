@@ -1,16 +1,23 @@
 #ifndef _ARMDSP_H_
 #define _ARMDSP_H_
 
+#define ARMDSP_SRAM_BASE 0x80000000
+#define ARMDSP_SRAM_SIZE 0x00020000
+
+#define ARMDSP_DRAM_BASE 0xc4000000
+#define ARMDSP_DRAM_SIZE 0x04000000
+
 /*
  * communication area is first page of shared ram
  */
-#define ARMDSP_COMM_PHYS 0x80000000
-#define ARMDSP_COMM_SIZE 0x1000
+#define ARMDSP_COMM_PHYS ARMDSP_SRAM_BASE
 
 #define ARMDSP_COMM_VECS 0
 /* vector table size is 0x200 */
 #define ARMDSP_COMM_TRGBUF 0x200
 #define ARMDSP_COMM_TRGBUF_SIZE (4+8+256)
+
+#define ARMDSP_COMM_SIZE 0x1000
 
 struct armdsp_trgbuf {
 	uint32_t owner;
@@ -25,5 +32,7 @@ struct armdsp_trgbuf {
 #define ARMDSP_IOC_MAGIC  'a'
 #define ARMDSP_IOCSTOP _IO(ARMDSP_IOC_MAGIC, 47)
 #define ARMDSP_IOCSTART _IO(ARMDSP_IOC_MAGIC, 48)
+
+char *armdsp_run (char const *filename);
 
 #endif /* _ARMDSP_H_ */

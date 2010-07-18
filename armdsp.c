@@ -90,34 +90,6 @@ armdsp_reset (void)
 	armdsp_writephys (val & ~MDCTL_LRESET, PSC0_ADDR + MDCTL15);
 }
 
-static void
-armdsp_run (void)
-{
-	uint32_t val;
-
-	val = armdsp_readphys (PSC0_ADDR + MDSTAT15);
-	if ((val & MDSTAT_STATE_MASK) != MDCTL_ENABLE) {
-		/* turn on dsp power */
-		val = armdsp_readphys (PSC0_ADDR + MDCTL15);
-		val = (val & ~MDCTL_STATE_MASK) | MDCTL_ENABLE;
-		armdsp_writephys (val, PSC0_ADDR + MDCTL15);
-
-		val = armdsp_readphys (PSC0_ADDR + PTCMD);
-		armdsp_writephys (val | 2, PSC0_ADDR + PTCMD);
-
-		while ((armdsp_readphys (PSC0_ADDR + PTSTAT) & 2) != 0)
-			;
-	}
-
-	/* write pointer to vector table */
-	armdsp_writephys (ARMDSP_COMM_PHYS + ARMDSP_COMM_VECS,
-			  SYSCFG0_ADDR + HOST1CFG_OFFSET);
-
-	/* un-assert reset */
-	val = armdsp_readphys (PSC0_ADDR + MDCTL15);
-	armdsp_writephys (val | MDCTL_LRESET, PSC0_ADDR + MDCTL15);
-}
-
 static ssize_t
 armdsp_read (struct file *filp, char __user *buf, size_t count,
 	     loff_t *f_pos)
@@ -189,6 +161,7 @@ armdsp_ioctl (struct inode *inode, struct file *filp,
 {
 	unsigned int minor = iminor (filp->f_path.dentry->d_inode);
 	int err = 0;
+	uint32_t val;
 
 	switch(cmd) {
 	case ARMDSP_IOCSTOP:
@@ -206,7 +179,28 @@ armdsp_ioctl (struct inode *inode, struct file *filp,
 		}
 		flush_cache_all ();
 		wmb ();
-		armdsp_run();
+
+		val = armdsp_readphys (PSC0_ADDR + MDSTAT15);
+		if ((val & MDSTAT_STATE_MASK) != MDCTL_ENABLE) {
+			/* turn on dsp power */
+			val = armdsp_readphys (PSC0_ADDR + MDCTL15);
+			val = (val & ~MDCTL_STATE_MASK) | MDCTL_ENABLE;
+			armdsp_writephys (val, PSC0_ADDR + MDCTL15);
+			
+			val = armdsp_readphys (PSC0_ADDR + PTCMD);
+			armdsp_writephys (val | 2, PSC0_ADDR + PTCMD);
+			
+			while ((armdsp_readphys (PSC0_ADDR + PTSTAT) & 2) != 0)
+				;
+		}
+
+		/* write pointer to vector table */
+		armdsp_writephys (ARMDSP_COMM_PHYS + ARMDSP_COMM_VECS,
+				  SYSCFG0_ADDR + HOST1CFG_OFFSET);
+
+		/* un-assert reset */
+		val = armdsp_readphys (PSC0_ADDR + MDCTL15);
+		armdsp_writephys (val | MDCTL_LRESET, PSC0_ADDR + MDCTL15);
 		break;
 
 	default:

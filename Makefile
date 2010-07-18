@@ -47,8 +47,8 @@ dsptest.dsp: $(DSPTEST_OBJS) armdsp-link.cmd
 
 dsptrg.obj: dsptrg.c regs-omap-l138.h
 
-rundsp: rundsp.c armdsp.h
-	$(ARMCC) -o rundsp rundsp.c
+rundsp: rundsp.c libarmdsp.c armdsp.h
+	$(ARMCC) -o rundsp rundsp.c libarmdsp.c
 
 armnet: armnet.c
 	gcc -g -Wall -o armnet armnet.c
