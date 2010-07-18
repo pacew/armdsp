@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdint.h>
 
+#include "armdsp.h"
 #include "trgbuf.h"
 #include "regs-omap-l138.h"
 

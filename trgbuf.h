@@ -1,14 +1,5 @@
 #ifndef _TRGBUF_H_
 #define _TRGBUF_H_
-/*
- * communication area is first page of shared ram
- */
-#define ARMDSP_COMM_PHYS 0x80000000
-
-#define ARMDSP_COMM_VECS 0 /* 512 (0x200) bytes */
-#define ARMDSP_COMM_TRGBUF 0x800 /* 20 + 256 bytes */
-
-#define ARMDSP_COMM_SIZE 0x1000
 
 /*
  * owner starts at 0
