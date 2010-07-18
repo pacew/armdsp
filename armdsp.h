@@ -33,6 +33,13 @@ struct armdsp_trgbuf {
 #define ARMDSP_IOCSTOP _IO(ARMDSP_IOC_MAGIC, 47)
 #define ARMDSP_IOCSTART _IO(ARMDSP_IOC_MAGIC, 48)
 
+#ifndef __KERNEL__
+char *armdsp_init (void);
 char *armdsp_run (char const *filename);
+void armdsp_host (void);
+
+int armdsp_verbose;
+int armdsp_fd;
+#endif /* __KERNEL__ */
 
 #endif /* _ARMDSP_H_ */

@@ -11,7 +11,6 @@
 
 static unsigned char *sram;
 static unsigned char *dram;
-static int dspfd;
 
 static int
 read_prog (char const *filename)
@@ -85,7 +84,7 @@ bad:
 }
 
 /* returns NULL on success, else error string */
-static char *
+char *
 armdsp_init (void)
 {
 	static int memfd;
@@ -112,7 +111,7 @@ armdsp_init (void)
 		if (dram == MAP_FAILED)
 			return ("armdsp_init: can't mmap dram");
 
-		if ((dspfd = open ("/dev/armdsp0", O_RDONLY | O_NONBLOCK)) < 0)
+		if ((armdsp_fd = open ("/dev/armdsp0",O_RDWR|O_NONBLOCK))<0)
 			return ("armdsp_init: can't open /dev/armdsp0");
 	}
 
@@ -123,20 +122,140 @@ armdsp_init (void)
 char *
 armdsp_run (char const *filename)
 {
-	char *errstr;
-
-	if ((errstr = armdsp_init ()) != NULL)
-		return (errstr);
-
-	if (ioctl (dspfd, ARMDSP_IOCSTOP, 0) < 0)
+	if (ioctl (armdsp_fd, ARMDSP_IOCSTOP, 0) < 0)
 		return ("armdsp_run: can't stop dsp");
 
 	if (read_prog (filename) < 0)
 		return ("armdsp_run: can't read program");
 
-	if(ioctl (dspfd, ARMDSP_IOCSTART, 0) < 0)
+	if(ioctl (armdsp_fd, ARMDSP_IOCSTART, 0) < 0)
 		return ("armdsp_run: can't start dsp");
 
 	return (NULL);
 }
 
+/* from ti's rtssrc/trgcio.h */
+#define _DTOPEN    (0xF0)
+#define _DTCLOSE   (0xF1)
+#define _DTREAD    (0xF2)
+#define _DTWRITE   (0xF3)
+#define _DTLSEEK   (0xF4)
+#define _DTUNLINK  (0xF5)
+#define _DTGETENV  (0xF6)
+#define _DTRENAME  (0xF7)
+#define _DTGETTIME (0xF8)
+#define _DTGETCLK  (0xF9)
+#define _DTSYNC    (0xFF)
+
+static void
+put2le (unsigned char **upp, int val)
+{
+	*(*upp)++ = val;
+	*(*upp)++ = val >> 8;
+}
+
+static unsigned int
+get2le (unsigned char **upp)
+{
+	unsigned int val;
+	val = *(*upp)++;
+	val |= (*(*upp)++) << 8;
+	return (val);
+}
+
+/* communicates with ti's rtssrc/SHARED/trgdrv.c */
+void
+handle_write (uint8_t *params, void *datap, int datalen)
+{
+	uint8_t *up;
+	int fd, count;
+	short ret;
+	uint8_t retbuf[8];
+
+	up = params;
+	fd = get2le (&up);
+	count = get2le (&up);
+
+	if (armdsp_verbose)
+		printf ("write(%d,...,%d)\n", fd, count);
+
+	if (count != datalen) {
+		printf ("proto error\n");
+		exit (1);
+	}
+
+	if (fd == 1 || fd == 2) {
+		ret = write (fd, datap, count);
+	} else {
+		ret = -1;
+	}
+
+	memset (retbuf, 0, sizeof retbuf);
+	up = retbuf;
+	put2le (&up, ret);
+	write (armdsp_fd, retbuf, 8);
+}
+
+void
+handle_close (uint8_t *params, void *datap, int datalen)
+{
+	short ret;
+	unsigned char *up;
+	int fd;
+	uint8_t retbuf[8];
+
+	up = params;
+	fd = get2le (&up);
+
+	if (armdsp_verbose)
+		printf ("close(%d)\n", fd);
+
+	ret = 0;
+
+	memset (retbuf, 0, sizeof retbuf);
+	up = retbuf;
+	put2le (&up, ret);
+	write (armdsp_fd, retbuf, 8);
+}
+
+void
+armdsp_host (void)
+{
+	uint8_t tbuf[ARMDSP_COMM_TRGBUF_SIZE];
+	uint8_t *params;
+	ssize_t n;
+	void *datap;
+	int i;
+	int command;
+	int datalen;
+
+	while ((n = read (armdsp_fd, tbuf, sizeof tbuf)) > 0) {
+		if (n < 9) {
+			fprintf (stderr, "armdsp proto error\n");
+			exit (1);
+		}
+
+		command = tbuf[0];
+		params = tbuf + 1;
+		datap = tbuf + 9;
+		datalen = n - 9;
+
+		switch (command) {
+		case _DTWRITE:
+			handle_write (params, datap, datalen);
+			break;
+		case _DTCLOSE:
+			handle_close (params, datap, datalen);
+			break;
+		default:
+			printf ("armdsp_host unknown command 0x%x\n", command);
+			printf ("params ");
+			for (i = 0; i < 8; i++)
+				printf ("%02x ", params[i]);
+			printf ("\n");
+			printf ("datalen %d\n", datalen);
+			exit (1);
+			break;
+		}
+	}
+}

@@ -56,8 +56,8 @@ armnet: armnet.c
 armnet.arm: armnet.c
 	$(ARMCC) -o armnet.arm armnet.c
 
-armhost: armdsp.h armhost.c
-	$(ARMCC) -o armhost armhost.c 
+armhost: armdsp.h armhost.c libarmdsp.c
+	$(ARMCC) -o armhost armhost.c libarmdsp.c
 
 regdefs: regdefs.c
 	cc -g -Wall -o regdefs regdefs.c

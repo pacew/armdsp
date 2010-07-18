@@ -38,8 +38,13 @@ main (int argc, char **argv)
 	if (optind != argc)
 		usage ();
 
+	if ((err = armdsp_init ()) != NULL) {
+		fprintf (stderr, "armdsp_init error: %s\n", err);
+		exit (1);
+	}
+
 	if ((err = armdsp_run (progname)) != NULL) {
-		fprintf (stderr, "error: %s\n", err);
+		fprintf (stderr, "armdsp_run error: %s\n", err);
 		exit (1);
 	}
 
