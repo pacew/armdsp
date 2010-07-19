@@ -31,7 +31,7 @@
 
 #include "armdsp.h"
 
-/* the arm kernel thinks it's a uniprocessor, so nops wmb(), etc */
+/* the arm kernel thinks it's a uniprocessor, so normal wmb() is a nop */
 #define armdsp_wmb() do { dsb(); } while (0)
 #define armdsp_rmb() do { dmb(); } while (0)
 
