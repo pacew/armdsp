@@ -9,6 +9,17 @@
 
 extern int volatile vector_table[];
 
+static void
+wmb (void)
+{
+	/*
+	 * reading any memory mapped reg drains write buffer
+	 * see Cache User's Guide section 2.6
+	 */
+	readreg (L1PCFG);
+}
+
+
 /* 
  * low level communication between arm and dsp
  * called on the dsp side by ti's rtssrc/SHARED/trgdrv.c
@@ -37,7 +48,7 @@ writemsg (unsigned char command,
 
 	trgbuf->length = p - trgbuf->buf;
 
-	/* want to drain write buffers here */
+	wmb ();
 
 	trgbuf->owner = ARMDSP_TRGBUF_OWNER_ARM;
 	writereg (SYSCFG0_CHIPSIG, 1); /* CHIPINT0 to arm */
@@ -55,7 +66,6 @@ readmsg (unsigned char *params, char *data)
 		((unsigned char *)vector_table + ARMDSP_COMM_TRGBUF);
 
 	while (1) {
-		/* want to flush cache here */
 		if (trgbuf->owner == ARMDSP_TRGBUF_OWNER_DSP)
 			break;
 	}
