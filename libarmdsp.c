@@ -83,7 +83,7 @@ bad:
 
 /* returns NULL on success, else error string */
 char *
-armdsp_init (void)
+armdsp_init (int cold_boot)
 {
 	static int memfd;
 	static int beenhere;
@@ -113,6 +113,11 @@ armdsp_init (void)
 			return ("armdsp_init: can't open /dev/armdsp0");
 	}
 
+	if (cold_boot) {
+		ioctl (armdsp_fd, ARMDSP_IOCSTOP, 0);
+		memset (armdsp_sram, 0, ARMDSP_SRAM_SIZE);
+		ioctl (armdsp_fd, ARMDSP_IOCWMB, 0);
+	}
 
 	return (NULL);
 }

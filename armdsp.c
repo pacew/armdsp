@@ -149,11 +149,11 @@ armdsp_write (struct file *filp, const char __user *buf, size_t count,
 		if (copy_from_user (trgbuf->buf, buf, count))
 			return (-EFAULT);
 		trgbuf->length = count;
-		/* flush WB */
+		/* flushes cache and WB */
 		clean_dcache_area (trgbuf,
 				   &trgbuf->buf[count] - (uint8_t *)trgbuf);
-		armdsp_wmb ();
 		trgbuf->owner = ARMDSP_TRGBUF_OWNER_DSP;
+		clean_dcache_area (&trgbuf->owner, sizeof trgbuf->owner);
 		return (count);
 	}
 
@@ -183,7 +183,6 @@ armdsp_ioctl (struct inode *inode, struct file *filp,
 			break;
 		}
 		flush_cache_all ();
-		armdsp_wmb ();
 
 		val = armdsp_readphys (PSC0_ADDR + MDSTAT15);
 		if ((val & MDSTAT_STATE_MASK) != MDCTL_ENABLE) {
@@ -209,11 +208,8 @@ armdsp_ioctl (struct inode *inode, struct file *filp,
 		break;
 
 	case ARMDSP_IOCWMB:
-		armdsp_wmb ();
-		break;
-
 	case ARMDSP_IOCRMB:
-		armdsp_rmb ();
+		flush_cache_all ();
 		break;
 
 	default:

@@ -39,7 +39,7 @@ struct armdsp_trgbuf {
 #define ARMDSP_IOCRMB _IO(ARMDSP_IOC_MAGIC, 50)
 
 #ifndef __KERNEL__
-char *armdsp_init (void);
+char *armdsp_init (int cold_boot);
 char *armdsp_run (char const *filename);
 void armdsp_host (void);
 
