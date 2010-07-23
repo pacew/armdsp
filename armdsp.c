@@ -30,6 +30,7 @@
 #include <mach/common.h>
 
 #include "armdsp.h"
+#include "regs-omap-l138.h"
 
 /* the arm kernel thinks it's a uniprocessor, so normal wmb() is a nop */
 #define armdsp_wmb() do { dsb(); } while (0)
@@ -274,6 +275,51 @@ armdsp_irq (int irq, void *dev_id)
 
 static int armdsp_need_cdev_del;
 
+static void
+gpio_test (void)
+{
+	uint32_t mask5, mask6;
+	uint32_t val;
+
+	printk ("\n\ngpio test\n");
+
+	printk ("pinmux %x = %x\n", SYSCFG0_PINMUX13,
+		armdsp_readphys (SYSCFG0_PINMUX13));
+
+	val = armdsp_readphys (SYSCFG0_PINMUX13);
+	val &= ~0xff00;
+	val |= 0x8800;
+	armdsp_writephys (val, SYSCFG0_PINMUX13);
+
+	printk ("pinmux %x = %x\n", SYSCFG0_PINMUX13,
+		armdsp_readphys (SYSCFG0_PINMUX13));
+
+
+	mask5 = 1 << 12;
+	mask6 = 1 << 13;
+	printk ("dir67 %x\n", armdsp_readphys (GPIO_DIR67));
+
+	val = armdsp_readphys (GPIO_DIR67);
+	val &= ~(mask5 | mask6);
+	armdsp_writephys (val, GPIO_DIR67);
+	
+	printk ("dir67 %x\n", armdsp_readphys (GPIO_DIR67));
+
+	printk ("out67 %x\n", armdsp_readphys (GPIO_OUT_DATA67));
+
+	val = armdsp_readphys (GPIO_OUT_DATA67);
+	if (1) {
+		val |= mask5 | mask6;
+	} else {
+		val &= ~(mask5 | mask6);
+	}
+	armdsp_writephys (val, GPIO_OUT_DATA67);
+	printk ("out67 %x\n", armdsp_readphys (GPIO_OUT_DATA67));
+
+}
+
+
+
 static int __init 
 armdsp_init (void)
 {
@@ -322,6 +368,8 @@ armdsp_init (void)
 		dp->have_irq = 1;
 	}
 
+
+	gpio_test ();
 	return (0);
 
 cleanup:
