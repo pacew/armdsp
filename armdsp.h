@@ -31,12 +31,18 @@ struct armdsp_trgbuf {
 #define ARMDSP_TRGBUF_OWNER_DSP 0
 #define ARMDSP_TRGBUF_OWNER_ARM 1
 
+struct armdsp_physio {
+	uint32_t physaddr;
+	uint32_t val;
+};
 
 #define ARMDSP_IOC_MAGIC  'a'
 #define ARMDSP_IOCSTOP _IO(ARMDSP_IOC_MAGIC, 47)
 #define ARMDSP_IOCSTART _IO(ARMDSP_IOC_MAGIC, 48)
 #define ARMDSP_IOCWMB _IO(ARMDSP_IOC_MAGIC, 49)
 #define ARMDSP_IOCRMB _IO(ARMDSP_IOC_MAGIC, 50)
+#define ARMDSP_IOCREADP _IOWR(ARMDSP_IOC_MAGIC, 51, struct armdsp_physio)
+#define ARMDSP_IOCWRITEP _IOW(ARMDSP_IOC_MAGIC, 52, struct armdsp_physio)
 
 #ifndef __KERNEL__
 char *armdsp_init (int cold_boot);

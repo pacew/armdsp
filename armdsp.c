@@ -82,6 +82,13 @@ static struct armdsp_trgbuf *trgbuf;
 #define MDCTL_ENABLE		0x03
 #define MDCTL_LRESET		(1<<8)
 
+/*
+ * for these, addr must be in the range IO_PHYS..(IO_PHYS+IO_SIZE) 
+ * which is 0x01c00000 and 0x02000000
+ * or modules "EDMA3 CC" to "McBSP1 FIFO Data"
+ *
+ * outside this range, must use ioremap/iounmap
+ */
 #define armdsp_readphys(addr) (readl(IO_ADDRESS(addr)))
 #define armdsp_writephys(val,addr) (writel(val,IO_ADDRESS(addr)))
 
@@ -168,6 +175,9 @@ armdsp_ioctl (struct inode *inode, struct file *filp,
 	unsigned int minor = iminor (filp->f_path.dentry->d_inode);
 	int err = 0;
 	uint32_t val;
+	struct armdsp_physio physarg;
+	void __user *argp = (void __user *)arg;
+	uint32_t __iomem *iop;
 
 	switch(cmd) {
 	case ARMDSP_IOCSTOP:
@@ -211,6 +221,39 @@ armdsp_ioctl (struct inode *inode, struct file *filp,
 	case ARMDSP_IOCWMB:
 	case ARMDSP_IOCRMB:
 		flush_cache_all ();
+		break;
+
+	case ARMDSP_IOCREADP:
+		if (copy_from_user (&physarg, argp, sizeof physarg)) {
+			err = -EFAULT;
+			break;
+		}
+		iop = ioremap (physarg.physaddr, sizeof *iop);
+		if (! iop) {
+			err = -EFAULT;
+			break;
+		}
+		physarg.val = *iop;
+		iounmap (iop);
+
+		if (copy_to_user (argp, &physarg, sizeof physarg)) {
+			err = -EFAULT;
+			break;
+		}
+		break;
+
+	case ARMDSP_IOCWRITEP:
+		if (copy_from_user (&physarg, argp, sizeof physarg)) {
+			err = -EFAULT;
+			break;
+		}
+		iop = ioremap (physarg.physaddr, sizeof *iop);
+		if (! iop) {
+			err = -EFAULT;
+			break;
+		}
+		*iop = physarg.val;
+		iounmap (iop);
 		break;
 
 	default:
@@ -275,68 +318,6 @@ armdsp_irq (int irq, void *dev_id)
 
 static int armdsp_need_cdev_del;
 
-static void
-gpio_test (void)
-{
-	uint32_t mask5, mask6, mask_other;
-	uint32_t val;
-
-	printk ("\n\ngpio test\n");
-
-	printk ("pinmux %x = %x\n", SYSCFG0_PINMUX13,
-		armdsp_readphys (SYSCFG0_PINMUX13));
-
-	val = armdsp_readphys (SYSCFG0_PINMUX13);
-	val &= ~0xffff;
-	val |= 0x8888;
-	armdsp_writephys (val, SYSCFG0_PINMUX13);
-
-	printk ("pinmux %x = %x\n", SYSCFG0_PINMUX13,
-		armdsp_readphys (SYSCFG0_PINMUX13));
-
-
-	mask5 = 1 << 12;
-	mask6 = 1 << 13;
-	mask_other = (1 << 11)|(1 << 10)|(1 << 9)|(1 << 8);
-	printk ("dir67 %x\n", armdsp_readphys (GPIO_DIR67));
-
-	val = armdsp_readphys (GPIO_DIR67);
-	val &= ~(mask5 | mask6 | mask_other);
-	armdsp_writephys (val, GPIO_DIR67);
-	
-	printk ("dir67 %x\n", armdsp_readphys (GPIO_DIR67));
-
-	printk ("out67 %x\n", armdsp_readphys (GPIO_OUT_DATA67));
-
-	val = armdsp_readphys (GPIO_OUT_DATA67);
-	if (1) {
-		val |= mask5 | mask6;
-	} else {
-		val &= ~(mask5 | mask6);
-	}
-	armdsp_writephys (val, GPIO_OUT_DATA67);
-	printk ("out67 %x\n", armdsp_readphys (GPIO_OUT_DATA67));
-
-
-	val = armdsp_readphys (SYSCFG0_PINMUX11);
-	val &= ~0xffffff00;
-	val |=  0x88888800;
-	armdsp_writephys (val, SYSCFG0_PINMUX11);
-
-	val = armdsp_readphys (SYSCFG0_PINMUX12);
-	val &= ~0x0000ffff;
-	val |=  0x00008888;
-	armdsp_writephys (val, SYSCFG0_PINMUX12);
-
-	val = armdsp_readphys (SYSCFG0_PINMUX13);
-	val &= ~0xffffff00;
-	val |=  0x88888800;
-	armdsp_writephys (val, SYSCFG0_PINMUX13);
-
-}
-
-
-
 static int __init 
 armdsp_init (void)
 {
@@ -384,11 +365,6 @@ armdsp_init (void)
 			goto cleanup;
 		dp->have_irq = 1;
 	}
-
-
-	printk ("pinmux %x = %x\n", SYSCFG0_PINMUX13, readl (SYSCFG0_PINMUX13));
-
-	gpio_test ();
 
 	return (0);
 
