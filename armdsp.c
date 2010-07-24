@@ -30,6 +30,7 @@
 #include <mach/common.h>
 
 #include "armdsp.h"
+#include "regs-omap-l138.h"
 
 /* the arm kernel thinks it's a uniprocessor, so normal wmb() is a nop */
 #define armdsp_wmb() do { dsb(); } while (0)
@@ -321,6 +322,9 @@ armdsp_init (void)
 			goto cleanup;
 		dp->have_irq = 1;
 	}
+
+
+	printk ("pinmux %x = %x\n", SYSCFG0_PINMUX13, readl (SYSCFG0_PINMUX13));
 
 	return (0);
 
