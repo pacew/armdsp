@@ -275,6 +275,68 @@ armdsp_irq (int irq, void *dev_id)
 
 static int armdsp_need_cdev_del;
 
+static void
+gpio_test (void)
+{
+	uint32_t mask5, mask6, mask_other;
+	uint32_t val;
+
+	printk ("\n\ngpio test\n");
+
+	printk ("pinmux %x = %x\n", SYSCFG0_PINMUX13,
+		armdsp_readphys (SYSCFG0_PINMUX13));
+
+	val = armdsp_readphys (SYSCFG0_PINMUX13);
+	val &= ~0xffff;
+	val |= 0x8888;
+	armdsp_writephys (val, SYSCFG0_PINMUX13);
+
+	printk ("pinmux %x = %x\n", SYSCFG0_PINMUX13,
+		armdsp_readphys (SYSCFG0_PINMUX13));
+
+
+	mask5 = 1 << 12;
+	mask6 = 1 << 13;
+	mask_other = (1 << 11)|(1 << 10)|(1 << 9)|(1 << 8);
+	printk ("dir67 %x\n", armdsp_readphys (GPIO_DIR67));
+
+	val = armdsp_readphys (GPIO_DIR67);
+	val &= ~(mask5 | mask6 | mask_other);
+	armdsp_writephys (val, GPIO_DIR67);
+	
+	printk ("dir67 %x\n", armdsp_readphys (GPIO_DIR67));
+
+	printk ("out67 %x\n", armdsp_readphys (GPIO_OUT_DATA67));
+
+	val = armdsp_readphys (GPIO_OUT_DATA67);
+	if (1) {
+		val |= mask5 | mask6;
+	} else {
+		val &= ~(mask5 | mask6);
+	}
+	armdsp_writephys (val, GPIO_OUT_DATA67);
+	printk ("out67 %x\n", armdsp_readphys (GPIO_OUT_DATA67));
+
+
+	val = armdsp_readphys (SYSCFG0_PINMUX11);
+	val &= ~0xffffff00;
+	val |=  0x88888800;
+	armdsp_writephys (val, SYSCFG0_PINMUX11);
+
+	val = armdsp_readphys (SYSCFG0_PINMUX12);
+	val &= ~0x0000ffff;
+	val |=  0x00008888;
+	armdsp_writephys (val, SYSCFG0_PINMUX12);
+
+	val = armdsp_readphys (SYSCFG0_PINMUX13);
+	val &= ~0xffffff00;
+	val |=  0x88888800;
+	armdsp_writephys (val, SYSCFG0_PINMUX13);
+
+}
+
+
+
 static int __init 
 armdsp_init (void)
 {
