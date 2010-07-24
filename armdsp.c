@@ -388,6 +388,8 @@ armdsp_init (void)
 
 	printk ("pinmux %x = %x\n", SYSCFG0_PINMUX13, readl (SYSCFG0_PINMUX13));
 
+	gpio_test ();
+
 	return (0);
 
 cleanup:

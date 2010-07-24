@@ -32,7 +32,8 @@ CL6X_FLAGS = --abi=eabi
 	$(CL6X) $(CL6X_FLAGS) -c $*.asm
 # ================================================================
 
-all: armdsp.ko dsptest rundsp armhost regdefs regs-omap-l138.h \
+all: regs-omap-l138.h \
+	armdsp.ko dsptest rundsp armhost regdefs regs-omap-l138.h \
 	armnet armnet.arm libarmdsp.a
 
 armdsp.ko: armdsp.c armdsp.h
