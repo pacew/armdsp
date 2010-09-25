@@ -1,6 +1,7 @@
 # -*- mode:Makefile -*-
 ARMDSP_DIR=/usr/local/armdsp
-ARMCC = arm-none-linux-gnueabi-gcc -g -Wall -I$(ARMDSP_DIR)/include \
+ARM_CROSS_COMPILE=arm-none-linux-gnueabi-
+ARMCC = $(ARM_CROSS_COMPILE)gcc -g -Wall -I$(ARMDSP_DIR)/include \
 	-L$(ARMDSP_DIR)/arm/lib
 CL6X = cl6x
 

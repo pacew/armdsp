@@ -34,16 +34,23 @@ CL6X_FLAGS = --abi=eabi
 
 all: regs-omap-l138.h \
 	armdsp.ko dsptest rundsp armhost regdefs regs-omap-l138.h \
-	armnet armnet.arm libarmdsp.a
+	armnet armnet.arm libarmdsp.a armdsp-mkais aisdump
+
+aisdump: aisdump.c
+	gcc -g -Wall -o aisdump aisdump.c
+
+armdsp-mkais: armdsp-mkais.c
+	gcc -g -Wall -o armdsp-mkais armdsp-mkais.c
 
 armdsp.ko: armdsp.c armdsp.h
 	$(MAKE) -C $(KERNELDIR) M=$(PWD) modules
 
 DSPTEST_OBJS = vecs.obj dsptrg.obj dsptest.obj
-dsptest: $(DSPTEST_OBJS) armdsp-link.cmd
+dsptest: $(DSPTEST_OBJS) armdsp-link.cmd armdsp-mkais
 	$(CL6X) $(CL6X_FLAGS) -z armdsp-link.cmd $(DSPTEST_OBJS) \
 		--output_file dsptest.elf
-	hex6x -q -m --order=M --romwidth=32 -o=dsptest dsptest.elf
+	hex6x -q -m --order=M --romwidth=32 -o=dsptest.srec dsptest.elf
+	./armdsp-mkais dsptest.srec dsptest
 	dis6x dsptest.elf > dsptest.dis
 	nm6x dsptest.elf | sort > dsptest.nm
 
@@ -78,6 +85,7 @@ install: all
 	mkdir -p -m 755 $(ARMDSP_DIR)/dsp
 	mkdir -p -m 755 $(ARMDSP_DIR)/include
 	install -c -m 555 armdsp-link $(ARMDSP_DIR)/bin/.
+	install -c -m 555 armdsp-mkais $(ARMDSP_DIR)/bin/.
 	install -c -m 444 Makefile.armdsp $(ARMDSP_DIR)/.
 	install -c -m 444 armdsp.ko $(ARMDSP_DIR)/arm/.
 	install -c -m 555 rundsp $(ARMDSP_DIR)/arm/.

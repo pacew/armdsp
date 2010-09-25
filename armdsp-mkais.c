@@ -89,12 +89,12 @@ bad:
 void
 usage (void)
 {
-	fprintf (stderr, "usage: armdsp-mkobj infile outfile\n");
+	fprintf (stderr, "usage: armdsp-mkais infile outfile\n");
 	exit (1);
 }
 
 void write_file (char *ext, void *base, int size);
-char *inname;
+char *inname, *outname;
 
 FILE *outf;
 
@@ -113,7 +113,6 @@ int
 main (int argc, char **argv)
 {
 	int c;
-	char outname[1000], *p;
 
 	while ((c = getopt (argc, argv, "")) != EOF) {
 		switch (c) {
@@ -126,6 +125,11 @@ main (int argc, char **argv)
 		usage ();
 
 	inname = argv[optind++];
+
+	if (optind >= argc)
+		usage ();
+
+	outname = argv[optind++];
 
 	if (optind != argc)
 		usage ();
@@ -143,12 +147,6 @@ main (int argc, char **argv)
 		exit (1);
 	}
 
-	
-	snprintf (outname, sizeof outname - 10, "%s", inname);
-	if ((p = strrchr (outname, '.')) != NULL)
-		*p = 0;
-	strcat (outname, ".ais");
-	remove (outname);
 	if ((outf = fopen (outname, "w")) == NULL) {
 		fprintf (stderr, "can't create %s\n", outname);
 		exit (1);
@@ -207,20 +205,21 @@ write_section (uint8_t *buf, int size, uint32_t dest)
 		nonzero_bytes = next_zero_off - next_off;
 
 		if (nonzero_bytes) {
-			printf ("load 0x%x 0x%x\n",
-				dest + next_off, nonzero_bytes);
-			put32le (0x58536901);
+			printf ("%08lx load 0x%x 0x%x\n",
+				ftell (outf), dest + next_off, nonzero_bytes);
+			put32le (0x58535901);
 			put32le (dest + next_off);
 			put32le (nonzero_bytes);
 			fwrite (buf + next_off, 1, nonzero_bytes, outf);
 		}
 
 		if (zero_bytes) {
-			printf ("zero 0x%x 0x%x\n",
-				dest + next_zero_off, zero_bytes);
-			put32le (0x585e590a);
+			printf ("%08lx zero 0x%x 0x%x\n",
+				ftell (outf), dest + next_zero_off, zero_bytes);
+			put32le (0x5853590a);
 			put32le (dest + next_zero_off);
 			put32le (zero_bytes);
+			/* probably 0=8bit; 1=16bits; 2=32bits */
 			put32le (0); /* type of memory access 8/16/32 */
 			put32le (0);
 		}

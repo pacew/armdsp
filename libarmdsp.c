@@ -9,75 +9,110 @@
 #include <sys/wait.h>
 #include "armdsp.h"
 
+static uint32_t
+get32le (FILE *f)
+{
+	int a, b, c, d;
+
+	a = getc (f);
+	b = getc (f);
+	c = getc (f);
+	d = getc (f);
+
+	return (a | (b << 8) | (c << 16) | (d << 24));
+}
+
 
 static int
 read_prog (char const *filename)
 {
-	FILE *f;
-	char buf[10000];
-	unsigned int count, addr;
-	char *p;
-	int i;
-	int val;
-	unsigned char volatile *base;
-	int size;
+	FILE *inf;
+	uint32_t cmd, addr, nbytes, limit, pattern, i;
+	uint8_t volatile *base;
 
-	if ((f = fopen (filename, "r")) == NULL)
+	if ((inf = fopen (filename, "r")) == NULL)
 		return (-1);
 
-	while (fgets (buf, sizeof buf, f) != NULL) {
-		p = buf;
-		if (*p != 'S')
-			continue;
-		p++;
-		switch (*p) {
-		case '0':
-			continue;
-		case '7':
-			goto done;
-		case '3':
-			break;
+	if (get32le (inf) != 0x41504954)
+		goto bad;
+
+	while (! feof (inf)) {
+		cmd = get32le (inf);
+
+		switch (cmd) {
 		default:
 			goto bad;
-		}
-		p++;
-		if (sscanf (p, "%2x%8x", &count, &addr) != 2)
-			goto bad;
-		p += 5 * 2;
-		count -= 5;
 
-		if (addr >= ARMDSP_SRAM_BASE
-		    && addr < ARMDSP_SRAM_BASE + ARMDSP_SRAM_SIZE) {
-			addr -= ARMDSP_SRAM_BASE;
-			base = armdsp_sram;
-			size = ARMDSP_SRAM_SIZE;
-		} else if (addr >= ARMDSP_DRAM_BASE
-			   && addr < ARMDSP_DRAM_BASE + ARMDSP_DRAM_SIZE) {
-			addr -= ARMDSP_DRAM_BASE;
-			base = armdsp_dram;
-			size = ARMDSP_DRAM_SIZE;
-		} else {
-			printf ("invalid addr 0x%x\n", addr);
-			exit (1);
-		}
+		case 0x58535901: /* section load */
+			addr = get32le (inf);
+			nbytes = get32le (inf);
 
-		if (addr < 0 || addr + count > size)
-			goto bad;
-		for (i = 0; i < count; i++) {
-			if (sscanf (p, "%2x", &val) != 1)
+			if (addr >= ARMDSP_SRAM_BASE
+			    && addr < ARMDSP_SRAM_BASE + ARMDSP_SRAM_SIZE) {
+				addr -= ARMDSP_SRAM_BASE;
+				base = armdsp_sram;
+				limit = ARMDSP_SRAM_SIZE;
+			} else if (addr >= ARMDSP_DRAM_BASE
+				   && addr
+				   < ARMDSP_DRAM_BASE + ARMDSP_DRAM_SIZE) {
+				addr -= ARMDSP_DRAM_BASE;
+				base = armdsp_dram;
+				limit = ARMDSP_DRAM_SIZE;
+			} else {
 				goto bad;
-			p += 2;
-			base[addr + i] = val;
+			}
+
+			if (addr + nbytes > limit)
+				goto bad;
+
+			for (i = 0; i < nbytes; i++)
+				base[addr + i] = getc (inf);
+			if (nbytes & 3) {
+				for (i = (nbytes & 3); i < 4; i++)
+					getc (inf);
+			}
+			break;
+		case 0x5853590A:
+			addr = get32le (inf);
+			nbytes = get32le (inf);
+			if (get32le (inf) != 0) /* type must be bytes */
+				goto bad;
+			pattern = get32le (inf);
+
+			if (addr >= ARMDSP_SRAM_BASE
+			    && addr < ARMDSP_SRAM_BASE + ARMDSP_SRAM_SIZE) {
+				addr -= ARMDSP_SRAM_BASE;
+				base = armdsp_sram;
+				limit = ARMDSP_SRAM_SIZE;
+			} else if (addr >= ARMDSP_DRAM_BASE
+				   && addr
+				   < ARMDSP_DRAM_BASE + ARMDSP_DRAM_SIZE) {
+				addr -= ARMDSP_DRAM_BASE;
+				base = armdsp_dram;
+				limit = ARMDSP_DRAM_SIZE;
+			} else {
+				goto bad;
+			}
+
+			if (addr + nbytes > limit)
+				goto bad;
+
+			memset ((void *)(base + addr), pattern, nbytes);
+			break;
+
+		case 0x58535906:
+			addr = get32le (inf);
+			goto done;
 		}
 	}
 
 done:
-	fclose (f);
+	fclose (inf);
 	return (0);
 
 bad:
-	fclose (f);
-	fprintf (stderr, "%s: invalid srecord\n", filename);
+	fclose (inf);
+	fprintf (stderr, "%s: invalid ais file\n", filename);
 	return (-1);
 }
 
@@ -167,7 +202,7 @@ get2le (unsigned char **upp)
 }
 
 /* communicates with ti's rtssrc/SHARED/trgdrv.c */
-void
+static void
 handle_write (uint8_t *params, void *datap, int datalen)
 {
 	uint8_t *up;
@@ -199,7 +234,7 @@ handle_write (uint8_t *params, void *datap, int datalen)
 	write (armdsp_fd, retbuf, 8);
 }
 
-void
+static void
 handle_close (uint8_t *params, void *datap, int datalen)
 {
 	short ret;

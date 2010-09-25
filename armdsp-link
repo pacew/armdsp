@@ -33,13 +33,13 @@ then
     exit 1
 fi
 
-hex6x -q -m --order=M --romwidth=32 -o=${outname} ${elfname}
+hex6x -q -m --order=M --romwidth=32 -o=${outname}.srec ${elfname}
 ret=$?
 if [ $ret != 0 ]
 then
     echo $ret
 fi
 
-exit 0
+$adir/bin/armdsp-mkais ${outname}.srec ${outname}
 
 
